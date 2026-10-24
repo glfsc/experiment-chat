@@ -15,25 +15,40 @@
 | 启动命令 | `node server.js`（等价 `npm start`） |
 | 监听端口 | 默认 `3000`，可用环境变量 `PORT` 覆盖 |
 | 静态资源 | `public/` 目录 |
-| 入口地址 | 首页 `/`（账号密码登录 · 注册 · 问卷链接入口）；被试端 `/chat?q=<问卷ID>`；管理端 `/admin`（需登录）；健康检查 `/api/health` |
-| 账号 | 首次启动自动创建管理员 `admin`（初始密码 `admin123`，登录后请立即在「设置 → 修改密码」中修改）；普通账号可在登录页自助注册 |
+| 入口地址 | 根路径 `/` = 管理端（未登录时显示登录卡片；卡片下方可凭链接或短码进被试端，无需登录），`/admin` 等价；被试端 `/chat?q=<问卷ID>`；健康检查 `/api/health` |
+| 账号 | 首次启动自动创建管理员 `admin`（初始密码 `admin123`，登录后请立即在「设置 → 修改密码」中修改）；普通账号可在登录卡片上自助注册。同一账号同时只允许一台设备在线：在别处登录或修改密码后，先前设备上的登录会立即失效 |
 
 首次启动会自动建表，并灌入种子数据：两个实验模板（组别3 / 组别4）+ 两份预设问卷。
+
+> **问卷二维码（部署后同样可用）**：管理端「问卷管理」可为每份问卷生成二维码（行内二维码图标），
+> 并可「保存图片」导出海报式 PNG（问卷名 + 二维码 + 网址）。二维码里的地址在部署环境会自动使用
+> 管理端所在的公网域名（如 `https://glfsc.ltd/chat?q=<问卷ID>`），被试在任何网络扫码都能直接进入作答页，
+> **不需要与服务器同一局域网**；本机 localhost 打开管理端时则自动改用局域网 IP。
 
 ---
 
 ## 二、需要上传到服务器的文件
 
+本地打包（推荐，**只带运行必需文件**）：
+
+```bash
+npm run deploy     # → dist/上线包.zip
+```
+
+包内含（15 个文件，zip 内是站点目录的直接一层，解压即原地覆盖）：
+
 ```
 server.js        # 服务端入口
 db.js            # 数据层（建表 / 访问函数）
+seed-content.js  # 实验材料文案种子
 xlsx.js          # 数据导出 Excel
 package.json     # 项目信息（无依赖，仅为 npm start / engines 声明）
-public/          # 前端页面（admin / chat / index 及静态资源）
-scripts/         # 可选：reset-db、consistency-check 等自检工具
+public/          # 前端页面（admin / chat 及静态资源）
+vendor/qrcode.js # 二维码生成（管理端生成被试二维码用）
+README.md / DEPLOY.md   # 文档，不影响运行
 ```
 
-**不要上传**：`data.db`（首次运行自动创建）、`node_modules/`（不存在依赖）、`design/`、`demand/`、`screenshots/`、`*.md` 文档（不影响运行，可不传）。
+**不要上传**：`data.db`（服务器上的库原样保留，见第七节）、`node.exe`（服务器自己装 Node）、`node_modules/`（不存在依赖）、`design/`、`demand/`、`screenshots/`。
 
 > ⚠️ 如果你本地已经配好问卷内容想直接迁移，改为在**服务器首次运行并停止后**，把本地 `data.db`（含 `-wal`、`-shm`，若存在）整体覆盖上去即可；否则服务器会用种子数据全新开始。
 
@@ -41,13 +56,122 @@ scripts/         # 可选：reset-db、consistency-check 等自检工具
 
 ## 三、服务器要求
 
-- 一台 Linux VPS（Ubuntu 22.04 / Debian 12 等），**1核1G 起步完全够用**（轻量实验并发场景）
+- 一台服务器（Windows Server 2019/2022 或 Linux VPS 均可），**1核1G 起步完全够用**（轻量实验并发场景）
+- 服务器上装有 **Node.js ≥ 22.13.0**（`node -v` 自查；`node:sqlite` 的硬性下限，低版本起不来）
 - 已将域名 `glfsc.ltd` 的 A 记录解析到服务器 IP
-- ⚠️ 如果你买的是 **PHP 虚拟主机 / 纯静态空间**，此程序无法部署，需要 VPS 或支持 Node.js 进程托管的服务
+- ⚠️ 如果你买的是 **PHP 虚拟主机 / 纯静态空间**，此程序无法部署，需要能跑常驻 Node 进程的服务器
 
 ---
 
-## 四、部署步骤（以 Ubuntu 为例）
+## 四、Windows Server 的更新流程（本站在用的方式）
+
+> **本站真实环境（2026-10-17 现场核实；与"宝塔站点目录"那套无关，务必先看这张表）**
+>
+> | 项 | 实际值 |
+> |---|---|
+> | 应用目录 | `C:\apps\experiment-chat\LLM_in_dm` ← **不是** `C:\wwwroot\glfsc.ltd`（那里只有宝塔占位页） |
+> | 启动脚本 | `C:\apps\experiment-chat\start-server.cmd`（两行：`cd /d …\LLM_in_dm` + `C:\nodejs\node.exe server.js`，日志 `server.out.log`；**没有 `DB_PATH`**） |
+| Node 运行时 | `C:\nodejs\node.exe`（脚本里写死的绝对路径；`≥ 22.13` 是硬性下限） |
+> | 常驻方式 | Windows 计划任务 **`LLM_in_dm`**（不是宝塔的「Node 项目」） |
+> | 更新包目录 | `C:\apps\experiment-chat\update\`（把 zip 丢进去即可） |
+> | 一键更新脚本 | `C:\apps\experiment-chat\update.cmd`：备份库 → 7-Zip 解压 → robocopy 覆盖（跳过 `data.db`、`uploads`）→ `schtasks /end`+结束 node → `schtasks /run` → 自检 HTTP 200 |
+> | 备份目录 | `C:\apps\experiment-chat\backup\<时间戳>\`（库）、`backup\code-<时间戳>\`（代码）、`backup\old-db-<时间戳>\`（整库迁移） |
+> | 反向代理 / 证书 | 宝塔里已配好（nginx → `127.0.0.1:3000`，证书覆盖 `glfsc.ltd` + `www.glfsc.ltd`），更新时不用动 |
+>
+> 操作入口：腾讯云控制台的**自动化助手**（执行命令、看结果）+ **文件管理**（上传/删除文件）。
+>
+> **服务是怎么跑起来的（`start-server.cmd` 与计划任务 `LLM_in_dm` 的实况，排查从这里开始）**
+> - 启动脚本全文就两行：`cd /d C:\apps\experiment-chat\LLM_in_dm` + `"C:\nodejs\node.exe" server.js >> server.out.log 2>&1`
+>   —— **没有设 `DB_PATH`**，所以库就是 `LLM_in_dm\data.db`（连同 `-wal`/`-shm` 三个文件）。
+> - 计划任务以 **SYSTEM** 身份、最高权限运行；触发器**只有「开机时」**，`MultipleInstancesPolicy=IgnoreNew`（已有实例在跑时，再「运行」会被忽略），**没有失败自动重启**。
+> - 手工重启：`schtasks /end /tn LLM_in_dm` → `taskkill /IM node.exe /F` → `schtasks /run /tn LLM_in_dm`
+> - 看日志：`type C:\apps\experiment-chat\LLM_in_dm\server.out.log`（日志是追加写的，看最新几行即可）
+> - **腾讯云自动化助手是用 PowerShell 执行的**（不是 cmd.exe）：`dir /a` 这类 CMD 参数会直接报错。查文件用
+>   `Get-ChildItem C:\apps\experiment-chat\LLM_in_dm\data.db* | Select-Object Name,Length,LastWriteTime`；
+>   `schtasks` / `taskkill` / `curl.exe` 是外部程序照常可用（注意 PowerShell 里 `curl` 是 `Invoke-WebRequest` 的别名，要写 `curl.exe`）。
+> - （可选加固）任务属性里勾上「如果任务失败，按以下频率重新启动」，或在宝塔/计划任务里加一条定时 `curl http://127.0.0.1:3000/api/health` 的健康检查——现在的配置一旦 node 崩了，站点会一直 502 到人工重启。
+
+### 1. 只改代码（最常见）
+
+1. 本地改完 → `npm run deploy` → `dist/上线包.zip`（不带 `node.exe`、**不带 `data.db`**）。
+2. 「文件管理」把 zip 上传到 `C:\apps\experiment-chat\update\`。
+3. 「自动化助手」执行：
+
+   ```cmd
+   C:\apps\experiment-chat\update.cmd nopause
+   ```
+
+   （`nopause` 必须带：脚本结尾有个 `pause`，不带参数会一直卡住等按键。）
+4. 看到 `RESULT: OK - new version is running.` 即成功，浏览器打开 https://glfsc.ltd 抽查。
+
+> **`update.cmd` 自带的库备份只拷 `data.db` 这一个文件**。库在 WAL 模式下正常运行时，真实数据往往还在 `data.db-wal` 里（本站实测过 2.35 MB），所以那份备份可能是**不完整**的。做"要动数据"的操作前，请按第四节第 3 小节把**三个文件一起**另备一份。
+
+> **覆盖 ≠ 镜像**：包里已删除的旧文件（如早期的 `public\index.html`、`public\connect.html`）会继续留在服务器上。它们不再被任何路由指向（`/connect` 返回 404；`/index.html` 由新代码映射到管理端），不影响运行；想干净可以手工删。
+
+### 2. 改了问卷文案 / 参数（`seed-content.js`、`db.js` 的题目）—— 代码之外还要同步一次库
+
+库里的题目是**创建时的快照**，光更新代码不会改它。改过文案或参数（反馈正文、选项、等待秒数、指导语、欢迎语…）后，除代码更新外还要执行一次内容同步：
+
+```cmd
+cd /d C:\apps\experiment-chat\LLM_in_dm
+node scripts\sync-group-content.js              :: 先预览（不写库），会打印与种子的逐字段差异
+node scripts\sync-group-content.js --apply      :: 应用：自动备份 data.db 到 .tmp\ 后写入
+```
+
+- 只影响两份预设问卷 + 两个实验模板；**问卷短码不变**，二维码与被试链接继续有效。
+- 顺序：先 `update.cmd`（代码就位）→ 再同步（写库）→ 需要时再重启任务。
+
+### 3. 想彻底换一个干净库（清空数据 / 换种子内容）
+
+两个必须先搞清的点：
+
+**① WAL：`data.db` 三个文件是一体的。** 主库可能只有 4 KB，真实数据在 `data.db-wal` 里（本站迁库前实测：`data.db` 4096 字节 + `data.db-wal` 2.35 MB）。**备份、移走、还原都必须三个一起做**，只动 `data.db` 会丢数据。
+
+**①-补：动库之前必须先真正停掉服务。** 服务还在跑时移动/改名 `data.db*`，Windows 上要么直接失败（文件占用），要么"移动看起来成功了、但进程仍握着那个文件继续读写"——**本站 2026-10-16 就踩到了这个**：三个库文件被移到了备份目录，服务却还在往那份文件里写，站点一切正常，但"换库"根本没发生（旧短码还在、会话编号继续往下排）。验收要点两条：
+- `dir /a /o-d <备份目录>\data.db*` —— 里面 `data.db-wal` 的时间戳若是**现在还在变新**，说明服务正写在备份目录那份文件上；
+- 停服务要用**管理员权限**：`schtasks /end /tn LLM_in_dm` 之后必须 `taskkill /IM node.exe /F`，再用 `tasklist | findstr node.exe` 确认**没有残留进程**（任务是 SYSTEM 身份运行的，非管理员会话里 taskkill 会失败）。
+
+**② 库的位置（已核实）**：`C:\apps\experiment-chat\LLM_in_dm\data.db`——`start-server.cmd` 没设 `DB_PATH`，脚本里的 `cd /d` 就是运行目录。动手前再确认一眼：
+
+```cmd
+dir /a /o-d C:\apps\experiment-chat\LLM_in_dm\data.db*    :: 三个文件的大小与时间
+```
+
+（若哪天真给启动脚本加了 `set DB_PATH=…`，就以那个路径为准——`type C:\apps\experiment-chat\start-server.cmd` 可以看出来。）
+
+> **判断"库有没有真的换掉"，要看短码，不要用 `node -e "require('./db')"`** —— 那条命令会在**当前目录**新建一个空库再灌种子，看起来"新库已就绪"，其实跟正在跑的实例毫无关系（本站 10-16 就踩过这个假验证）。正确判据：管理端「问卷管理」里两组问卷的 8 位短码**变了** → 库真的换了；**没变** → 还是老库（短码是随机生成的，绝不复用）。
+
+确认库的位置、并确认"可以清空"之后：
+
+```cmd
+schtasks /end /tn LLM_in_dm
+taskkill /IM node.exe /F
+cd /d C:\apps\experiment-chat\LLM_in_dm
+md C:\apps\experiment-chat\backup\old-db-20261017
+move data.db     C:\apps\experiment-chat\backup\old-db-20261017\
+move data.db-wal C:\apps\experiment-chat\backup\old-db-20261017\
+move data.db-shm C:\apps\experiment-chat\backup\old-db-20261017\
+schtasks /run /tn LLM_in_dm
+curl http://127.0.0.1:3000/api/health
+```
+
+新代码启动时会自动建库并灌入种子（两份问卷 + 两个模板 + 管理员 `admin` / `admin123`）。
+
+> **换库后的两件必做**：① 问卷短码变了 → 各组二维码 / 被试链接**要重新导出**；② 管理员密码回到初始值 `admin123`，登录后立刻改。
+
+### 4. 回退
+
+- **回代码**：把 `backup\code-<时间戳>\` 覆盖回 `LLM_in_dm`，或把上一版 `上线包.zip` 再走一次 `update.cmd`。
+- **回数据库**：停服 → 把 `backup\old-db-<时间戳>\` 的三个文件放回库所在目录 → 启服。
+
+### 5. 端口与防火墙（已配好，一般不动）
+
+- 只放行 `80`、`443`；**不要对公网开放 3000**（应用只监听本机，由 nginx 反代过去）。
+- 确认 nginx 配置里 `proxy_pass http://127.0.0.1:3000;`，且 `server_name` 同时含 `glfsc.ltd www.glfsc.ltd`。
+
+---
+
+## 五、部署步骤（Linux VPS，备用方式）
 
 ### 1. 安装 Node.js 22
 
@@ -78,7 +202,8 @@ node server.js
 看到类似输出即成功：
 
 ```
-登录入口：  http://localhost:3000/
+实验平台已启动（局域网预实验模式）
+  管理端：http://localhost:3000/（根路径就是管理端，未登录时先显示登录卡片）
 ```
 
 另开一个终端验证：`curl http://127.0.0.1:3000/api/health` 应返回 `{"ok":true}`。
@@ -155,32 +280,110 @@ sudo apt install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d glfsc.ltd
 ```
 
-完成后访问 `https://glfsc.ltd` 应看到登录页，登录后进入管理端。
+完成后访问 `https://glfsc.ltd` 应看到管理端（未登录时先显示登录卡片，底部有 ICP 备案号），登录后直接进入管理端。
 
 ---
 
-## 五、数据与备份
+## 六、数据与备份
 
-- 全部业务数据（问卷、会话、消息、作答记录、设置）都在 **`data.db` 一个文件**里
-- **备份**：最稳妥是先停服务再拷贝（PM2：`pm2 stop experiment-chat`，拷完 `pm2 start`）；不停服时建议拷贝前执行 `sqlite3 data.db ".backup backup.db"`（需装 sqlite3），或连同 `-wal` / `-shm` 三个文件一起拷
+- 全部业务数据（问卷、会话、消息、作答记录、设置、账号）都在 **`data.db` 一个文件**里（另有 `-wal` / `-shm` 两个伴生文件）
+- **覆盖代码时不用动它**：新代码启动时会自动补齐旧库缺的表与列（`CREATE TABLE IF NOT EXISTS` + `ensureColumn`，
+  代码里注释写着「旧库补齐」），所以**老库直接沿用、数据不丢、也不需要重建**。
+  实测：用早期版本（无 `users` 表、少 12 个列）建的库，换成新代码启动后自动补出了 `users` 表和全部缺失列，旧问卷/实验模板在管理端正常显示。
+- **⚠️ 但库里的「问卷内容」是创建时的快照，不会跟着代码升级**：如果服务器上的库是旧版本建的，
+  升级后可能出现「AI 思考过程没有」「阅读限制不见了、时间限制跑到注意力检测上」这类现象 —— 那是旧题目模型里的
+  参数键（如 `delay`）在新模型里不生效导致的。**跑一次内容同步即可修好**（问卷 ID 不变，二维码/被试链接不受影响；
+  只动两份预设问卷 + 两个实验模板，你自己新建的问卷不受影响）：
+
+  ```cmd
+  cd /d C:\apps\experiment-chat\LLM_in_dm
+  node scripts\sync-group-content.js            :: 先预览（不写库），核对差异
+  node scripts/sync-group-content.js --apply    # 自动备份 data.db 到 .tmp/ 后写入
+  # 完事重启 Node 进程
+  ```
+
+  脚本在上线包里（`scripts/sync-group-content.js`）。同步的备份落在站点目录的 `.tmp/` 下。
+  老库里你自己试答留下的测试会话，同步后题号可能对不上，正式收数据前清掉即可（管理端数据页删会话）。
+- **想彻底重来**（库里还没有真实数据时最省事）：停服 → 把 `data.db`、`data.db-wal`、`data.db-shm` **三个文件一起改名/移走**（别直接删，留个后悔药）→ 启动 → 自动建新库并灌入预设模板与问卷，管理员 `admin` / `admin123`（**登录后立刻改密码**）。
+  Windows 上的完整命令见第四节第 3 小节；判断"确实换了库"看问卷短码是否变化。
+- **备份**：最稳妥是先停服务再拷贝（**三个文件一起拷**：`data.db`、`data.db-wal`、`data.db-shm`）；不停服时建议先执行 `sqlite3 data.db ".backup backup.db"`（需装 sqlite3）再拷
 - **换机迁移**：停服 → 拷贝 `data.db`（三个文件）→ 新机启动，无需其他操作
 - **重置数据库**（⚠️ 清空全部问卷与作答数据，仅测试用）：停服后运行 `npm run reset-db`
+- **把库放到项目之外（可选，推荐）**：默认库在项目根目录。用 `DB_PATH` 可以指到别处，让数据库不落在程序目录里——将来即使再出现文件读取类漏洞，也读不到库：
+
+  ```bash
+  sudo mkdir -p /var/lib/experiment-chat && sudo chown -R $USER /var/lib/experiment-chat
+  # PM2：DB_PATH=/var/lib/experiment-chat/data.db pm2 start server.js --name experiment-chat
+  # systemd：在 [Service] 里加 Environment=DB_PATH=/var/lib/experiment-chat/data.db
+  ```
+
+  目录不存在时会自动创建（但需要写权限，所以上面先 mkdir + chown 更稳）。
+  同一环境变量对 `npm run reset-db`、`npm run check`、`npm run portable` 等脚本同样生效，改动后记得重启服务。
+  迁移现有数据：停服后把 `data.db`（含 `-wal`/`-shm`）搬到新位置，再用 `DB_PATH` 启动。
 
 ---
 
-## 六、上线前检查清单
+<!-- 以下为上线检查与排障 -->
 
-- [ ] **修改管理员密码**（必须！初始密码为 `admin123`）：登录后进入左下角「设置 → 修改密码」直接修改，无需命令行
+## 七、上线前检查清单
+
+- [ ] **修改管理员密码**（必须！账号 `admin` / 初始密码 `admin123`）：登录后进入左下角「设置 → 修改密码」直接修改，无需命令行
+      （老版本只有密码没有账号，升级到本版后账号固定填 `admin`）
+- [ ] 打开 `https://glfsc.ltd` 确认根路径就是管理端（未登录时是登录卡片，底部有 ICP 备案号），`https://www.glfsc.ltd` 同样能打开
+- [ ] Node 进程由计划任务 **`LLM_in_dm`** 常驻（Windows 见第四节；**不要在远程桌面窗口里直接跑**，退出登录就没了）
 
 - [ ] 服务器防火墙 / 安全组只放行 `22`、`80`、`443`，**不要对公网开放 3000**
+- [ ] Nginx 反代必须带上 `X-Forwarded-For` / `X-Real-IP`（第四节的配置已包含）：按 IP 的访问限流靠它识别真实来源，
+      少了这两个头，所有请求会被当成来自 127.0.0.1 而共用一个配额桶
 - [ ] 在管理端建好各分组问卷，记录每组被试链接 `https://glfsc.ltd/chat?q=<问卷ID>`
 - [ ] 手机端走一遍完整流程（知情同意 → 创作 → 反馈 → 问卷 → 结束页）
 - [ ] 管理端数据页导出 Excel 验证正常
 - [ ] 做一次 `data.db` 备份
 
+### 访问限流（内置）
+
+服务端对少数入口做了固定窗口限流，超限返回 `429` 并带 `Retry-After`：
+
+| 入口 | 默认限额 | 环境变量 |
+|---|---|---|
+| 登录（按 IP） | 10 次 / 分钟 | `RATE_LOGIN_PER_MIN` |
+| 登录（按用户名） | 10 次 / 分钟 | `RATE_LOGIN_USER_PER_MIN` |
+| 注册（按 IP） | 3 次 / 小时 | `RATE_REGISTER_PER_HOUR` |
+| 开始作答（按 IP） | 600 次 / 分钟 | `RATE_SESSION_PER_MIN` |
+| 开始作答（全局） | 1200 次 / 分钟 | `RATE_SESSION_ALL_PER_MIN` |
+| 预览接口（按 IP） | 60 次 / 分钟 | `RATE_PREVIEW_PER_MIN` |
+
+**任意一条设成 `0` 就是关闭该条限流**（例：`RATE_SESSION_PER_MIN=0`），改完需重启服务。
+
+**作答主链路（`/api/step`、`/api/heartbeat`、`/api/bootstrap`）完全不限流**——被试在实验中途被限流等于直接丢数据。
+只有「开始作答」这一步有限流，它才是刷库入口。
+
+#### 几百人同时开始作答，扛得住吗
+
+实测（开发机，单进程 Node + 同步 SQLite）：
+
+| 场景 | 结果 |
+|---|---|
+| 200 人同时点「开始」（各自 IP） | 全部成功，总耗时 ~0.4 秒 |
+| 600 人同时点「开始」 | 全部成功，总耗时 ~1.2 秒（最后几位等约 1 秒） |
+| 200 人**共用同一出口 IP**（整班在机房） | 全部成功，总耗时 ~0.3 秒 |
+
+结论：**瓶颈不在服务端算力，而在限流的闸门高度**。早先的默认值（单 IP 30、全局 300）会把整班同学挡住，
+现已按「一间机房整班 + 一倍余量」重定档。若你的规模更大，按这两条调：
+
+- 整班共用出口 IP 且人数 > 600：调大 `RATE_SESSION_PER_MIN`，或直接设 `0` 关掉这条
+- 全场峰值可能超过 1200 次/分钟：调大 `RATE_SESSION_ALL_PER_MIN`
+
+被试在实验中途的作答提交不受任何限流影响，所以真正的并发压力只出现在「大家同时扫码开始」那一两分钟。
+先启动服务、再跑 `npm run probe`（可加 `CONCURRENCY=600`）就能在你的服务器上复现上表
+（脚本会临时建一份自己的问卷，跑完自动清理）。
+
+**只跑单个进程**：本程序把限流桶与预览会话放在进程内存里，起多实例会让它们各算各的；
+SQLite 单写者的特性也不适合多进程同时写。PM2 用默认的单实例模式即可，别加 `-i`。
+
 ---
 
-## 七、常见问题
+## 八、常见问题
 
 | 现象 | 原因与处理 |
 |---|---|
@@ -188,4 +391,4 @@ sudo certbot --nginx -d glfsc.ltd
 | 访问 502 Bad Gateway | Node 进程没起来：`pm2 status` / `pm2 logs` 检查，或端口与 `proxy_pass` 不一致 |
 | 端口被占用 | 换端口启动：`PORT=8080 node server.js`（同步改 Nginx `proxy_pass`） |
 | 导出的 xlsx 打不开 | 确认 `xlsx.js` 已上传到服务器 |
-| 宝塔面板部署 | 用「网站 → Node 项目」添加，启动文件选 `server.js`，端口 3000，Node 版本切到 22+，再对该站点设置反向代理到 `127.0.0.1:3000` |
+| 宝塔面板部署 | 本站**不走宝塔托管**（应用在 `C:\apps\experiment-chat\LLM_in_dm`，由计划任务 `LLM_in_dm` 拉起，宝塔只负责 nginx 反代与证书）——见第四节。若换到别的机器要用宝塔托管：用「网站 → Node 项目」添加，启动文件选 `server.js`，端口 3000，Node 版本 22+，再对该站点设置反向代理到 `127.0.0.1:3000` |

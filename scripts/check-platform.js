@@ -20,6 +20,8 @@ const Q_A = '自检·平台层A';
 const Q_C = '【自检夹具C·消息式题面与清屏点】';
 const Q_D = '【自检夹具D·超时重试】';
 const Q_B = '自检·平台层B';
+const Q_M = '【自检夹具M·需输入指定内容】';
+const Q_R = '【自检夹具R·打分题重做】';
 const RUN_STARTED = Date.now();
 
 let passed = 0;
@@ -42,6 +44,9 @@ const TASK_TEXT_A = '【夹具·任务要求 A】请为新品写一句广告语�
 const TASK_TEXT_B = '【夹具·任务要求 B】请为新品写一句广告语，并说明创作思路。';
 const FEEDBACK_TEXT = '【夹具·反馈正文】这是标准化反馈，用于验证逐字一致与落库完整。';
 const THINKING_TEXT = '【夹具·思考过程】先把任务要求过一遍，再对照标准推演。\n• 第一条\n• 第二条\n\n结论：按这几条来写反馈。';
+// 「需输入指定内容」的文本题：标准答案不下发给被试端，走查时由这里显式喂给 walk
+const MATCH_ANSWER = '我已完成阅读';
+const MATCH_ANSWERS = { typed: MATCH_ANSWER };
 
 // 覆盖全部题型 + 三类门控 + 题组 + 思考面板；门控用真实值（走查靠回拨快进，不用等）
 function fixture(taskText) {
@@ -50,9 +55,10 @@ function fixture(taskText) {
     { id: 'consent', type: 'gate', title: '知情同意说明', text: '【夹具】请阅读并勾选同意。', check: '我已阅读并同意', button: '开始实验', variant: 'id', idLabel: '被试编号', idPlaceholder: '请填写编号' },
     { id: 'task', type: 'message', title: '任务要求', text: taskText },
     { id: 'scale_intro', type: 'message', title: '量表指导语', text: '请根据实际感受作答。' },
-    { id: 'r1', type: 'rating', title: '我清楚任务目标。', min: 1, max: 5, anchor: '1 = 完全不同意　·　5 = 完全同意' },
-    { id: 'r2', type: 'rating', title: '我知道评价标准。', min: 1, max: 5, anchor: '1 = 完全不同意　·　5 = 完全同意' },
-    { id: 'r3', type: 'rating', title: '我清楚努力方向。', min: 1, max: 5, anchor: '1 = 完全不同意　·　5 = 完全同意' },
+    // 三题共享 id 前缀 sc = 一个 3 题量表（导出：一列均分 + 逐题三列原始分）
+    { id: 'sc_1', type: 'rating', title: '我清楚任务目标。', min: 1, max: 5, anchor: '1 = 完全不同意　·　5 = 完全同意' },
+    { id: 'sc_2', type: 'rating', title: '我知道评价标准。', min: 1, max: 5, anchor: '1 = 完全不同意　·　5 = 完全同意' },
+    { id: 'sc_3', type: 'rating', title: '我清楚努力方向。', min: 1, max: 5, anchor: '1 = 完全不同意　·　5 = 完全同意' },
     {
       id: 'work', type: 'group', title: '内容创作', text: '', layout: 'column',
       limits: { minSubmit: 180, maxAnswer: 300 },            // 最短提交 / 最长作答窗口
@@ -75,6 +81,8 @@ function fixture(taskText) {
     { id: 'multi', type: 'multi', title: '多选题', options: ['甲', '乙', '丙'] },
     { id: 'rank', type: 'rank', title: '请排序', options: ['一', '二', '三'] },
     { id: 'free', type: 'text', title: '文本题', required: true, rows: 1, maxLen: 30, placeholder: '请输入' },
+    // 文本题二级形态「需输入指定内容」：被试要在底部输入框里输入指定内容才发送得出去
+    { id: 'typed', type: 'text', variant: 'match', title: '【夹具】需输入指定内容', answer: MATCH_ANSWER, errorText: '【夹具】答案错误', placeholder: '请输入确认内容' },
     { id: 'debrief', type: 'debrief', title: '结束说明', text: '【夹具】到此结束，感谢参与。' }
   ];
 }
@@ -110,6 +118,15 @@ function fixtureD() {
   ];
 }
 
+// 夹具 R：专门验证「打分题单独重做」：改已交的分数只动那一行，进度与后续作答不受影响
+function fixtureR() {
+  return [
+    { id: 'r_open', type: 'rating', title: '【夹具R】重做·默认开', min: 1, max: 5, anchor: '1 = 完全不同意　·　5 = 完全同意' },
+    { id: 'r_closed', type: 'rating', title: '【夹具R】重做·已关闭', min: 1, max: 5, limits: { redo: 0 } },
+    { id: 'r_single', type: 'single', title: '【夹具R】单选收尾（非打分题）', options: ['甲', '乙'], correct: 0 }
+  ];
+}
+
 // 由夹具推导的期望值（不写死数字）
 function expectations(items) {
   const units = items.filter((it) => it.type !== 'message');
@@ -133,11 +150,12 @@ async function main() {
 
   const { request, login, bindAdmin } = makeHttp(BASE, ADMIN_PASSWORD);
   const token = await login();
-  const admin = bindAdmin(token);
+  // let：[10.4] 的再登录会触发「一账号单设备在线」把最初的 token 踢下线，之后要换新 token 重新绑定
+  let admin = bindAdmin(token);
 
-  // 清掉上次可能的残留
+  // 清掉上次可能的残留（中途崩溃会漏掉 [11] 的清理）
   for (const q of (await admin('/api/admin/questionnaires')).questionnaires) {
-    if (q.title === Q_A || q.title === Q_B) await admin('/api/admin/questionnaire/delete', { body: { id: q.id, force: true } });
+    if ([Q_A, Q_B, Q_M, Q_C, Q_D, Q_R].includes(q.title)) await admin('/api/admin/questionnaire/delete', { body: { id: q.id, force: true } });
   }
 
   const itemsA = fixture(TASK_TEXT_A);
@@ -163,8 +181,9 @@ async function main() {
   const defDebrief = metaFix.itemDefaults.debrief || {};
   const defMsg = metaFix.itemDefaults.message || {};
   const defRating = metaFix.itemDefaults.rating || {};
-  check('插入默认项自带正文：知情同意带 <h1> 标题',
-    String(defGate.html || '').startsWith('<h1>'), JSON.stringify(String(defGate.html || '').slice(0, 40)));
+  check('插入默认项自带正文：知情同意 = h3 小标题 + 小四正文',
+    String(defGate.html || '').startsWith('<h3>') && String(defGate.html || '').includes('font-size: 16px'),
+    JSON.stringify(String(defGate.html || '').slice(0, 60)));
   check('插入默认项自带正文：结束说明 / 打分题题干非空',
     String(defDebrief.html || '').includes('感谢') && String(defRating.html || '').includes('打分'),
     JSON.stringify({ debrief: String(defDebrief.html || '').length, rating: String(defRating.html || '').slice(0, 30) }));
@@ -183,8 +202,8 @@ async function main() {
   section('[2] 走查：流程完整性 + 同问卷两次逐字一致');
   const recA = {};
   const recB = {};
-  const sesA = await walk({ request, questionnaireId: qA.id, record: recA });
-  const sesB = await walk({ request, questionnaireId: qA.id, record: recB });
+  const sesA = await walk({ request, questionnaireId: qA.id, record: recA, matchAnswers: MATCH_ANSWERS });
+  const sesB = await walk({ request, questionnaireId: qA.id, record: recB, matchAnswers: MATCH_ANSWERS });
   check('流程走完（会话已完成）', recA.finished && recB.finished);
   check(`环节序列 = 夹具推导的 ${expect.unitCount} 个作答单元`,
     JSON.stringify(recA.seen) === JSON.stringify(expect.expectSeq),
@@ -195,7 +214,7 @@ async function main() {
   check('同问卷两次走查 AI 消息逐字一致', aiA.length === aiB.length && aiA.every((t, i) => t === aiB[i]));
 
   section('[3] 跨组：差异恰为任务要求一处');
-  const sesC = await walk({ request, questionnaireId: qB.id });
+  const sesC = await walk({ request, questionnaireId: qB.id, matchAnswers: MATCH_ANSWERS });
   const aiC = aiTexts(sesC.messages);
   const diff = [];
   for (let i = 0; i < Math.max(aiA.length, aiC.length); i += 1) if (aiA[i] !== aiC[i]) diff.push(i + 1);
@@ -248,11 +267,41 @@ async function main() {
   const buf = Buffer.from(await xlsxRes.arrayBuffer());
   check('xlsx 导出可用（PK 头）', xlsxRes.ok && buf.slice(0, 2).toString() === 'PK', `${buf.length} 字节`);
   const sheets = unzipSheetNames(buf);
-  check('含「汇总（一被试一行）」与「作答明细」两个 sheet',
-    sheets.includes('汇总（一被试一行）') && sheets.includes('作答明细'), sheets.join(' / '));
+  check('三个 sheet：汇总 / 逐题作答 / 作答明细（顺序固定）',
+    sheets.join('/') === '汇总（一被试一行）/逐题作答（一被试一行）/作答明细', sheets.join(' / '));
   const s1 = unzipEntry(buf, 'xl/worksheets/sheet1.xml');
   check('汇总表含被试自填编号列', /被试自填编号/.test(s1));
   check('汇总表带上了被试在知情同意页填的编号', /AUTO-01/.test(s1));
+  // 打分题：逐题各一列原始分，列名 = 短量表名 + 序号（夹具是「量表指导语」下的 3 题 sc_1..sc_3）
+  check('汇总表含打分题逐题原始分列（短量表名 + 序号）',
+    /量表指导语 1/.test(s1) && /量表指导语 2/.test(s1) && /量表指导语 3/.test(s1));
+  const row1 = (s1.match(/<row r="1"[^>]*>([\s\S]*?)<\/row>/) || [])[1] || '';
+  const headers1 = [...row1.matchAll(/<t[^>]*>([^<]*)<\/t>/g)].map((m) => m[1]);
+  const scaleAt = headers1.indexOf('量表指导语 1');
+  check('量表逐题列按题序连续排列（顺序与问卷一致）',
+    scaleAt >= 0 && headers1[scaleAt + 1] === '量表指导语 2' && headers1[scaleAt + 2] === '量表指导语 3',
+    headers1.slice(Math.max(0, scaleAt), scaleAt + 4).join(' | '));
+  check(`汇总表表头无重名（${headers1.length} 列）`, new Set(headers1).size === headers1.length,
+    headers1.filter((h, i) => headers1.indexOf(h) !== i).join(' | '));
+  check('汇总表不再单列「（均分）」（均分交给统计软件现算）',
+    !headers1.some((h) => /（均分）/.test(h)), headers1.filter((h) => /（均分）/.test(h)).join(' | '));
+  // 统计用精简表：状态 / 开始结束时间 / 时长 / 各题作答时间与耗时都不进这张表（要看去「作答明细」）
+  check('汇总表是统计用精简列（不带状态 / 时间 / 耗时）',
+    !headers1.some((h) => /状态|时间|时长|耗时/.test(h)), headers1.join(' | '));
+  const stylesXml = String(unzipEntry(buf, 'xl/styles.xml'));
+  check('汇总表套了 Times New Roman 11 号 + 表头居中换行 + 加高的表头行',
+    /<name val="Times New Roman"\/>/.test(stylesXml) && /<sz val="11"\/>/.test(stylesXml)
+      && /wrapText="1"/.test(stylesXml) && /horizontal="center"/.test(stylesXml)
+      && /ht="28.8" customHeight="1"/.test(s1));
+  const s2 = unzipEntry(buf, 'xl/worksheets/sheet2.xml');
+  check('逐题作答表：编号 + 完成状态 + 每题一列（单选 / 多选 / 排序 / 题组子题都在内）',
+    /被试编号/.test(s2) && /被试自填编号/.test(s2) && /完成状态/.test(s2)
+      && /注意力检测/.test(s2) && /请排序/.test(s2) && /广告语/.test(s2) && /多选题/.test(s2));
+  check('逐题作答表是纯答案（无呈现/作答时间、无耗时、无对错列）',
+    !/呈现时间|作答时间|耗时（秒）|·是否正确/.test(s2));
+  const s3 = unzipEntry(buf, 'xl/worksheets/sheet3.xml');
+  check('作答明细表移到 sheet3，列不变',
+    /呈现时间/.test(s3) && /作答时间/.test(s3) && /耗时（秒）/.test(s3) && /重试次数/.test(s3) && /曾超时未交/.test(s3));
 
   section('[7] 中途退出与恢复窗口三态');
   const settings = (await admin('/api/admin/settings')).settings;
@@ -328,7 +377,7 @@ async function main() {
   const introFix = adminDetailFix.messages.find((m) => RT.htmlToText(m.content).includes('开场材料'));
   check('正文以 HTML 下发且脚本注入被清洗', Boolean(introFix) && !/script|onclick/i.test(introFix.content));
   check('页面类题目的标题并入正文（h1）',
-    (qC.items.find((i) => i.id === 'c_gate').html || '').startsWith('<h1>'));
+    (qC.items.find((i) => i.id === 'c_gate').html || '').startsWith('<h1>'));   // 夹具自己的正文（不是默认项）
   check('题组正文里带上作答约定（可编辑，不再硬编码在输入框提示里）',
     String(qC.items.find((i) => i.id === 'c_g').html || '').includes('第一行填'));
 
@@ -576,6 +625,8 @@ async function main() {
   const secretRow = withDb((db) => db.prepare("SELECT value FROM settings WHERE key = 'auth_secret'").get());
   check('签名密钥持久化在 settings（服务重启后 token 仍然有效）',
     !!secretRow && String(secretRow.value).length >= 32, secretRow ? String(secretRow.value).length + ' 字符' : '缺失');
+  // 单设备在线：上面两次再登录已把最初那张 token 踢下线 —— 换记住密码的 30 天 token 重新绑定后续管理端调用
+  admin = bindAdmin(loginRemember.data.token);
 
   // 改倍速：最短提交 / 最长作答窗口必须一起折算 —— 否则客户端按新倍速显示会变成「设定值 × 倍速」
   const pvGate = await admin('/api/admin/preview', { body: { items: [
@@ -646,7 +697,7 @@ async function main() {
     ['<span style="font-size:13.5pt">x</span>', 19, '四号'],
     ['<span style="font-size:36pt">x</span>', 48, '小初'],
     ['<span style="font-size:48px">x</span>', 48, '小初'],
-    ['<span style="font-size:1.2em">x</span>', 16, '小四'],
+    ['<span style="font-size:1.2em">x</span>', 19, '四号'],      // em 按正文 16px 折算：1.2em = 19.2 → 四号 19px
     ['<font size="4">x</font>', 19, '四号'],
     ['<span style="font-size:52px">x</span>', 48, '小初']
   ];
@@ -663,8 +714,8 @@ async function main() {
   });
   check('字号清洗是幂等的（粘贴 → 保存 → 被试端渲染三次不漂移）', idemBad.length === 0,
     idemBad.map(([h]) => h).join('；'));
-  check('档位表与编辑器下拉同源（11 档，正文 14px）',
-    RT2.FONT_SIZE_PRESETS.length === 11 && RT2.BODY_FONT_PX === 14 && RT2.FONT_SIZE_PRESETS.some((x) => x.px === 48 && x.label === '小初'),
+  check('档位表与编辑器下拉同源（11 档，正文 16px = 小四）',
+    RT2.FONT_SIZE_PRESETS.length === 11 && RT2.BODY_FONT_PX === 16 && RT2.FONT_SIZE_PRESETS.some((x) => x.px === 48 && x.label === '小初'),
     JSON.stringify(RT2.FONT_SIZE_PRESETS.map((x) => x.label + x.px)));
 
   // 清洗器：散落的 void 型「丢弃标签」（meta / link / input / embed）不能把后面的内容一起吞掉
@@ -694,15 +745,248 @@ async function main() {
     JSON.stringify({ n: abOpts.length, ninth: abOpts[8] && abOpts[8].label }));
   await request('/api/preview/destroy', { body: { previewId: abPv.previewId } });
 
+  section('[10.7] 文本题·需输入指定内容（发送前先断言，不通过不发送）');
+  // 夹具 M：三种情形各一题 —— 自定义提示 / 默认提示（留空回落）/ 未配标准答案（退化为自由作答）
+  const itemsM = [
+    { id: 'm_intro', type: 'message', title: '开场', text: '【夹具M】开场。' },
+    { id: 'm_t1', type: 'text', variant: 'match', title: '【夹具M】请输入指定内容', answer: MATCH_ANSWER, errorText: '【夹具M】请核对后重新输入', placeholder: '请输入' },
+    { id: 'm_t2', type: 'text', variant: 'match', title: '【夹具M】默认提示', answer: 'OK' },
+    { id: 'm_t3', type: 'text', variant: 'match', title: '【夹具M】未设置答案', answer: '' },
+    { id: 'm_end', type: 'debrief', title: '【夹具M】结束', text: '【夹具M】结束。' }
+  ];
+  const qM = (await admin('/api/admin/questionnaire/create', { body: { title: Q_M, items: itemsM } })).questionnaire;
+  const mSaved = qM.items.find((i) => i.id === 'm_t1') || {};
+  check('形态与配置随题目保存（variant / answer / errorText）',
+    mSaved.variant === 'match' && mSaved.answer === MATCH_ANSWER && mSaved.errorText === '【夹具M】请核对后重新输入',
+    JSON.stringify({ variant: mSaved.variant, answer: mSaved.answer, errorText: mSaved.errorText }));
+  check('自由作答的文本题不带形态字段（JSON 保持干净）',
+    !qA.items.find((i) => i.id === 'free').variant && qA.items.find((i) => i.id === 'free').answer === undefined);
+
+  const mSes = await request('/api/session', { body: { q: qM.id } });
+  const mSid = mSes.data.session.id;
+  const mAct = mSes.data.action || {};
+  check('按普通题目计题号（第 1 题），并下发形态标记',
+    mAct.itemId === 'm_t1' && mAct.qno === 1 && mAct.variant === 'match',
+    JSON.stringify({ id: mAct.itemId, qno: mAct.qno, variant: mAct.variant }));
+  check('标准答案与提示文案都不下发给被试端（断言只在服务端做）',
+    mAct.answer === undefined && mAct.errorText === undefined,
+    JSON.stringify({ answer: mAct.answer, errorText: mAct.errorText }));
+
+  const mStep = (body) => request('/api/step', { body: { sessionId: mSid, elapsedMs: 300, ...body } });
+  const mEmpty = await mStep({ itemId: 'm_t1', text: '' });
+  check('内容为空：不通过，返回自定义提示且不发送',
+    mEmpty.status === 400 && mEmpty.data.error === 'invalid_answer' && mEmpty.data.assertionFailed === true
+      && mEmpty.data.message === '【夹具M】请核对后重新输入',
+    JSON.stringify(mEmpty.data));
+  const mWrong = await mStep({ itemId: 'm_t1', text: '我已完成' });
+  check('内容不一致：同样不通过（同一句提示）',
+    mWrong.status === 400 && mWrong.data.message === '【夹具M】请核对后重新输入', JSON.stringify(mWrong.data));
+  const mAfterFail = await request(`/api/bootstrap?q=${qM.id}&session=${mSid}`);
+  const mUsers = (mAfterFail.data.messages || []).filter((m) => m.role === 'user');
+  check('两次断言失败都没推进、也没写聊天流（点「发送」等于没发出去）',
+    mAfterFail.data.action && mAfterFail.data.action.itemId === 'm_t1' && mUsers.length === 0,
+    JSON.stringify({ action: mAfterFail.data.action && mAfterFail.data.action.itemId, userMessages: mUsers.length }));
+
+  const mOk = await mStep({ itemId: 'm_t1', text: `  ${MATCH_ANSWER}  ` });   // 首尾空格照样算一致
+  check('内容一致（含首尾空格）：通过并推进到下一题',
+    mOk.ok && mOk.data.action && mOk.data.action.itemId === 'm_t2',
+    JSON.stringify({ ok: mOk.ok, next: mOk.data.action && mOk.data.action.itemId }));
+  check('通过后按普通文本题处理：原话进聊天流（用户气泡）',
+    String((mOk.data.userMessage || {}).content || '') === MATCH_ANSWER,
+    JSON.stringify(String((mOk.data.userMessage || {}).content || '')));
+  const mDefault = await mStep({ itemId: 'm_t2', text: '随便写' });
+  check('题目没填提示文案：回落到默认「答案错误」',
+    mDefault.status === 400 && mDefault.data.message === '答案错误', JSON.stringify(mDefault.data));
+  const mCase = await mStep({ itemId: 'm_t2', text: 'ok' });
+  check('比对忽略大小写：ok 命中标准答案 OK',
+    mCase.ok && mCase.data.action && mCase.data.action.itemId === 'm_t3');
+  const mNoAnswer = await mStep({ itemId: 'm_t3', text: '随便写点什么都行' });
+  check('题目没配标准答案：退化为自由作答（管理端另有「尚未设置答案」提醒）',
+    mNoAnswer.ok && mNoAnswer.data.action && mNoAnswer.data.action.itemId === 'm_end');
+  await mStep({ itemId: 'm_end', ack: true });
+
+  const mDetail = await admin(`/api/admin/questionnaire/session?id=${qM.id}&sid=${mSid}`);
+  const mRow = (mDetail.responses || []).find((r) => r.itemId === 'm_t1') || {};
+  check('通过后落库：itemType = text、正文 = 被试输入',
+    mRow.itemType === 'text' && mRow.text === MATCH_ANSWER, JSON.stringify({ type: mRow.itemType, text: mRow.text }));
+  check('断言失败计入该题的「重试次数」（空 1 次 + 不一致 1 次 = 2）',
+    Number(mRow.retryCount) === 2, String(mRow.retryCount));
+
+  // 预览（管理端试填）走的是同一套状态机：断言一样生效，作者能当场试出提示长什么样
+  const mPv = await admin('/api/admin/preview', { body: { items: itemsM } });
+  const mPvBoot = await request('/api/preview/session', { body: { previewId: mPv.previewId } });
+  const mPvSid = mPvBoot.data.session.id;
+  const mPvWrong = await request('/api/preview/step', {
+    body: { previewId: mPv.previewId, sessionId: mPvSid, itemId: mPvBoot.data.action.itemId, text: '不对的内容' }
+  });
+  check('预览里同样被断言拦下（返回同一句提示）',
+    mPvWrong.status === 400 && mPvWrong.data.message === '【夹具M】请核对后重新输入', JSON.stringify(mPvWrong.data));
+  const mPvRight = await request('/api/preview/step', {
+    body: { previewId: mPv.previewId, sessionId: mPvSid, itemId: mPvBoot.data.action.itemId, text: MATCH_ANSWER }
+  });
+  check('预览里输入一致则正常推进', mPvRight.ok && mPvRight.data.action && mPvRight.data.action.itemId === 'm_t2');
+  await request('/api/preview/destroy', { body: { previewId: mPv.previewId } });
+
+  section('[10.8] 打分题单独重做：只改那一行的值，不推进进度');
+  const itemsR = fixtureR();
+  const qR = (await admin('/api/admin/questionnaire/create', { body: { title: Q_R, items: itemsR } })).questionnaire;
+  const sesR = (await request('/api/session', { body: { q: qR.id } })).data;
+  const sidR = sesR.session.id;
+  check('action 下发 allowRedo（默认开 = 1）',
+    Number(sesR.action && sesR.action.allowRedo) === 1,
+    JSON.stringify(sesR.action && sesR.action.allowRedo));
+  const rAns1 = await request('/api/step', { body: { sessionId: sidR, itemId: 'r_open', value: 2 } });
+  check('正常作答推进到下一题；redo:0 的题 allowRedo = 0',
+    rAns1.ok && rAns1.data.action && rAns1.data.action.itemId === 'r_closed' && Number(rAns1.data.action.allowRedo) === 0,
+    JSON.stringify(rAns1.data.action && { id: rAns1.data.action.itemId, allowRedo: rAns1.data.action.allowRedo }));
+  const redo1 = await request('/api/step', { body: { sessionId: sidR, itemId: 'r_open', value: 4, redo: true } });
+  check('重做已答打分题：只回 redone，不带下一题 / 消息',
+    redo1.ok && redo1.data.redone && Number(redo1.data.redone.value) === 4
+      && redo1.data.action === undefined && redo1.data.messages === undefined && redo1.data.clearStream === undefined,
+    JSON.stringify(redo1.data).slice(0, 140));
+  const bootR = await request(`/api/bootstrap?q=${qR.id}&session=${sidR}`);
+  check('重做不推进进度：当前题不变、已完成单元数不变',
+    bootR.ok && bootR.data.action && bootR.data.action.itemId === 'r_closed' && bootR.data.answeredCount === 1,
+    JSON.stringify({ action: bootR.data.action && bootR.data.action.itemId, answered: bootR.data.answeredCount }));
+  const detR = await admin(`/api/admin/questionnaire/session?id=${qR.id}&sid=${sidR}`);
+  const rowsOpen = detR.responses.filter((r) => r.itemId === 'r_open');
+  check('重做不新增作答行：明细为终值 4 分',
+    rowsOpen.length === 1 && Number(rowsOpen[0].value) === 4,
+    JSON.stringify(rowsOpen.map((r) => r.value)));
+  check('「我的选择」回显同步更新为新值',
+    (detR.messages || []).some((m) => m.role === 'user' && String(m.content).includes('4 分')),
+    JSON.stringify((detR.messages || []).filter((m) => m.role === 'user').map((m) => m.content)));
+  const redoBad = await request('/api/step', { body: { sessionId: sidR, itemId: 'r_open', value: 9, redo: true } });
+  check('重做越界值被拒（invalid_answer）',
+    redoBad.status === 400 && redoBad.data.error === 'invalid_answer',
+    `${redoBad.status} ${redoBad.data.error || ''}`);
+  const redoUnanswered = await request('/api/step', { body: { sessionId: sidR, itemId: 'r_single', value: 1, redo: true } });
+  check('未作答 / 非打分题不能走重做（redo_not_allowed）',
+    redoUnanswered.status === 400 && redoUnanswered.data.error === 'redo_not_allowed',
+    `${redoUnanswered.status} ${redoUnanswered.data.error || ''}`);
+  const rAns2 = await request('/api/step', { body: { sessionId: sidR, itemId: 'r_closed', value: 3 } });
+  check('重做后继续作答不受影响', rAns2.ok && rAns2.data.action && rAns2.data.action.itemId === 'r_single',
+    JSON.stringify(rAns2.data.action && rAns2.data.action.itemId));
+  const redoOff = await request('/api/step', { body: { sessionId: sidR, itemId: 'r_closed', value: 4, redo: true } });
+  check('关闭「允许重做」的打分题拒绝重做',
+    redoOff.status === 400 && redoOff.data.error === 'redo_not_allowed',
+    `${redoOff.status} ${redoOff.data.error || ''}`);
+  const finR = await request('/api/step', { body: { sessionId: sidR, itemId: 'r_single', value: 1 } });
+  check('交卷完成', finR.ok && finR.data.session && finR.data.session.status === 'completed',
+    JSON.stringify(finR.data.session));
+  const redoAfterFinish = await request('/api/step', { body: { sessionId: sidR, itemId: 'r_open', value: 5, redo: true } });
+  check('会话结束后不能重做（session_closed）',
+    redoAfterFinish.status === 409 && redoAfterFinish.data.error === 'session_closed',
+    `${redoAfterFinish.status} ${redoAfterFinish.data.error || ''}`);
+  // 预览（内存会话）走同一套状态机，重做分支天然可用
+  const pvR = await admin('/api/admin/preview', { body: { items: itemsR } });
+  const pvRBoot = await request('/api/preview/session', { body: { previewId: pvR.previewId } });
+  const pvRSid = pvRBoot.data.session.id;
+  await request('/api/preview/step', { body: { previewId: pvR.previewId, sessionId: pvRSid, itemId: 'r_open', value: 2 } });
+  const pvRedo = await request('/api/preview/step', { body: { previewId: pvR.previewId, sessionId: pvRSid, itemId: 'r_open', value: 5, redo: true } });
+  check('预览（内存会话）同样支持重做',
+    pvRedo.ok && pvRedo.data.redone && Number(pvRedo.data.redone.value) === 5,
+    JSON.stringify(pvRedo.data).slice(0, 140));
+  await request('/api/preview/destroy', { body: { previewId: pvR.previewId } });
+
   section('[11] 清理与设置还原');
   await admin('/api/admin/questionnaire/delete', { body: { id: qC.id, force: true } });
   await admin('/api/admin/questionnaire/delete', { body: { id: qA.id, force: true } });
   await admin('/api/admin/questionnaire/delete', { body: { id: qB.id, force: true } });
+  await admin('/api/admin/questionnaire/delete', { body: { id: qM.id, force: true } });
+  await admin('/api/admin/questionnaire/delete', { body: { id: qR.id, force: true } });
   const restQ = (await admin('/api/admin/questionnaires')).questionnaires;
-  check('夹具问卷已清理', restQ.every((q) => q.title !== Q_A && q.title !== Q_B && q.title !== Q_C && q.title !== Q_D));
+  check('夹具问卷已清理', restQ.every((q) => ![Q_A, Q_B, Q_C, Q_D, Q_M, Q_R].includes(q.title)));
   await admin('/api/admin/settings', { body: { resumeWindowHours: settings.resumeWindowHours } });
   const restored = (await admin('/api/admin/settings')).settings;
   check('全局设置已还原', restored.resumeWindowHours === settings.resumeWindowHours);
+
+  section('[12] 安全自检');
+  // ⚠️ 必须留在最后两节：这一节会故意打满限流桶，放到前面会把后面所有正常用例变成 429。
+  // 为了不污染真实配额（npm run check 后面还接着跑 consistency-check，它要登录），
+  // 打限流时统一用 X-Forwarded-For 伪造来源 IP —— 服务端只在对端是本机回环时才认这个头，
+  // 所以这条用例同时验证了「限流生效」和「直连时伪造该头无效」两件事。
+
+  // 正对照：先确认静态资源本身是通的，否则下面「穿越应当 404」可能因为路径写错而假通过
+  const assetOk = await request('/assets/chat.js');
+  check('正对照：静态资源可正常访问', assetOk.status === 200, `status=${assetOk.status}`);
+
+  // 路径穿越：URL 只对字面量 .. 做归一化，%2e%2e%2f 这类编码斜杠能绕过，必须在落点再校验
+  for (const target of ['package.json', 'server.js']) {
+    const res = await request(`/assets/%2e%2e%2f%2e%2e%2f${target}`);
+    check(`路径穿越被拒（${target}）`, res.status === 404, `status=${res.status}`);
+  }
+  const deepTraversal = await request('/assets/..%2f..%2f..%2f..%2fpackage.json');
+  check('多级路径穿越被拒', deepTraversal.status === 404, `status=${deepTraversal.status}`);
+
+  // 非法百分号编码应当 400：以前 decodeURIComponent 抛的 URIError 会走到兜底 500 并回显内部信息
+  const badEnc = await request('/assets/%ZZ');
+  check('非法编码返回 400 且不回显内部信息',
+    badEnc.status === 400 && !/URI|malformed|at /i.test(JSON.stringify(badEnc.data)),
+    `status=${badEnc.status} ${JSON.stringify(badEnc.data)}`);
+
+  // 安全响应头：页面与 API 两条路径都要带上
+  for (const route of ['/', '/api/health']) {
+    const h = (await fetch(BASE + route)).headers;
+    check(`安全响应头齐全（${route}）`,
+      h.get('x-content-type-options') === 'nosniff'
+      && h.get('x-frame-options') === 'SAMEORIGIN'
+      && /frame-ancestors 'self'/.test(h.get('content-security-policy') || '')
+      && h.get('referrer-policy') === 'no-referrer',
+      `nosniff=${h.get('x-content-type-options')} xfo=${h.get('x-frame-options')} csp=${!!h.get('content-security-policy')}`);
+  }
+  // 管理端编辑页用同源 iframe 嵌 /chat?preview= 做手机预览：这里钉住取值，防止有人改成 DENY 把预览拦掉
+  const chatFrame = (await fetch(BASE + '/chat')).headers.get('x-frame-options');
+  check('预览 iframe 不会被框定头拦住', chatFrame === 'SAMEORIGIN', `X-Frame-Options=${chatFrame}`);
+
+  // /api/net-info 会暴露服务器内网地址，必须登录才能取
+  const anonNet = await request('/api/net-info');
+  check('/api/net-info 匿名不可访问', anonNet.status === 401, `status=${anonNet.status}`);
+
+  // 作答入口不能被限流误伤：404 说明请求已放行到处理逻辑（用不存在的问卷码，只为确认没被 429 拦下）
+  const sessionProbe = await request('/api/session', { body: { q: 'sec-selfcheck-nonexistent' } });
+  check('作答入口未被限流拦截', sessionProbe.status !== 429, `status=${sessionProbe.status}`);
+
+  // 限流 · 按用户名：换 IP 猜同一个账号也要被挡住（阈值默认 10/分，故连打 14 次）
+  const fakeIpA = '203.0.113.7';
+  let userLimited = null;
+  for (let i = 0; i < 14 && !userLimited; i += 1) {
+    const res = await request('/api/auth/login', {
+      headers: { 'X-Forwarded-For': fakeIpA },
+      body: { username: 'sec-selfcheck-fake', password: `wrong-${i}` }
+    });
+    if (res.status === 429) userLimited = res;
+  }
+  check('登录限流·按用户名生效', !!userLimited && userLimited.data.error === 'rate_limited',
+    userLimited ? `status=429 error=${userLimited.data.error}` : '连打 14 次都没触发 429');
+
+  // 限流 · 按 IP：每次换用户名（用户名规则永不触发），只靠 IP 规则也应被挡住（阈值 10/分）
+  const fakeIpB = '203.0.113.8';
+  let ipLimited = null;
+  for (let i = 0; i < 14 && !ipLimited; i += 1) {
+    const res = await request('/api/auth/login', {
+      headers: { 'X-Forwarded-For': fakeIpB },
+      body: { username: `sec-selfcheck-u${i}`, password: 'wrong' }
+    });
+    if (res.status === 429) ipLimited = res;
+  }
+  check('登录限流·按 IP 生效', !!ipLimited && ipLimited.data.error === 'rate_limited',
+    ipLimited ? `status=429 error=${ipLimited.data.error}` : '连打 14 次都没触发 429');
+
+  // 限流响应要带 Retry-After，前端据此提示「稍后再试」
+  const retryAfter = ipLimited ? (await fetch(BASE + '/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': fakeIpB },
+    body: JSON.stringify({ username: 'sec-selfcheck-again', password: 'wrong' })
+  })).headers.get('retry-after') : null;
+  check('限流响应带 Retry-After', retryAfter !== null && Number(retryAfter) > 0, `Retry-After=${retryAfter}`);
+
+  // 正对照收尾：上面全用伪造 IP，真实来源的配额必须一点没被消耗——否则紧随其后的
+  // consistency-check.js 会连登录都失败
+  const realLogin = await request('/api/auth/login', { body: { username: 'admin', password: ADMIN_PASSWORD } });
+  check('正对照：真实来源配额未被限流测试消耗', realLogin.status === 200, `status=${realLogin.status}`);
+  const authNet = await request('/api/net-info', { token: realLogin.data.token });
+  check('正对照：/api/net-info 登录后可访问', authNet.status === 200 && Array.isArray(authNet.data.urls), `status=${authNet.status}`);
 
   console.log(`\n断言通过 ${passed} 项，失败 ${failures.length} 项`);
   console.log(`总耗时 ${((Date.now() - RUN_STARTED) / 1000).toFixed(1)}s（门控靠回拨快进，不真实等待）`);
