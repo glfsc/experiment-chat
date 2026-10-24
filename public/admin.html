@@ -82,6 +82,15 @@
 
   <!-- 管理视图：左侧边栏（菜单 / 大纲两种模式复用）+ 右侧内容区（未登录时由脚本切到上面的登录卡片） -->
   <div id="admin-view" class="admin-layout hidden">
+    <!-- 手机端顶栏：（编辑类页面）返回 + ☰ 打开抽屉（= 侧边栏）+ 页面标题；桌面端隐藏 -->
+    <header class="mobile-topbar" id="mobile-topbar">
+      <button id="tb-back" class="tb-btn hidden" type="button" title="返回" aria-label="返回">←</button>
+      <button id="tb-menu" class="tb-btn" type="button" title="打开菜单" aria-label="打开菜单">☰</button>
+      <span id="tb-title" class="tb-title">实验对话系统</span>
+    </header>
+    <!-- 手机端抽屉遮罩：点它收起抽屉（由 body.drawer-open 控制显隐，桌面端不渲染效果） -->
+    <div id="drawer-mask" class="drawer-mask" aria-hidden="true"></div>
+
     <aside class="sidebar">
       <div class="sidebar-brand">
         <span class="brand-dot" aria-hidden="true"></span>

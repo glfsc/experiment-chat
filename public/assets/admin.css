@@ -710,3 +710,225 @@ table.users-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 }
 .qr-alts { font-size: 11.5px; line-height: 1.9; color: var(--muted); margin: 10px 0 0; word-break: break-all; }
 .qr-alt-item { display: block; font-family: var(--mono); font-size: 11px; }
+
+/* ================================================================ 手机端适配（≤720px）
+   顶栏 + 抽屉：侧边栏整体复用为抽屉（默认折叠，点 ☰ 滑出）；
+   列表 / 数据大表格转紧凑卡片；编辑页不渲染手机预览列（「预览」按钮 = 全屏预览层）；
+   题卡与字段间距收紧。桌面端（>720px）完全不受影响：本节全部包在媒体查询里。 */
+
+/* 顶栏 / 遮罩：桌面端不存在（手机端在媒体查询内打开） */
+.mobile-topbar, .drawer-mask { display: none; }
+
+/* 全屏预览层（手机端编辑页「预览」按钮）：顶部一条控制条，下面真被试端 iframe 1:1 铺满剩余空间
+   （与被试端同一个页面，窗口多大界面就多大，不再缩小成手机壳） */
+.pv-layer {
+  position: fixed; inset: 0; z-index: 75; background: #101113;
+  display: flex; flex-direction: column;
+}
+.pv-layer.hidden { display: none; }
+.pv-top {
+  flex: 0 0 auto; min-height: 44px; display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px; color: #fff;
+}
+.pv-top .pv-close {
+  flex: 0 0 auto; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center;
+  font: inherit; font-size: 16px; color: #fff; background: none; border: 0; border-radius: 10px; cursor: pointer;
+}
+.pv-top .pv-close:active { background: #2a2b2e; }
+.pv-top .mini-btn { flex: 0 0 auto; white-space: nowrap; background: #2a2b2e; border-color: #3a3b40; color: #fff; }
+.pv-top .mini-btn.stale { color: #ffd27a; border-color: #6b5a2a; background: #3a3222; }
+/* 进度条占满控制条剩余宽度；题号输入框在层内收起（保持一条紧凑） */
+.pv-top .pv-scrub { flex: 1 1 auto; min-width: 0; margin: 0; }
+.pv-top .pv-scrub-range { accent-color: #8ef0a8; cursor: pointer; }
+.pv-top .pv-scrub-label { flex: 0 0 auto; color: #d6d6da; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pv-top .pv-scrub-jump { display: none; }
+.pv-top .pv-speed { flex: 0 0 auto; background: #2a2b2e; border-color: #3a3b40; color: #fff; }
+.pv-body { flex: 1 1 auto; min-height: 0; background: #fff; overflow: hidden; }
+/* 层内不再是「手机壳」：解除缩放与边框，iframe 即真机视口（与被试端 1:1） */
+.pv-body .phone-holder { position: static; width: 100% !important; height: 100% !important; margin: 0; }
+.pv-body .phone {
+  position: static; width: 100%; height: 100%;
+  transform: none !important; border: 0; border-radius: 0; box-shadow: none;
+}
+.pv-body .phone-frame { border-radius: 0; }
+
+@media (max-width: 720px) {
+  /* ---- 框架：固定顶栏 + 抽屉（默认折叠） ---- */
+  .mobile-topbar {
+    display: flex; align-items: center; gap: 6px;
+    position: fixed; top: 0; left: 0; right: 0; z-index: 60;
+    height: 48px; padding: 0 8px;
+    background: #fff; border-bottom: 1px solid var(--border);
+  }
+  .mobile-topbar .tb-btn {
+    flex: 0 0 auto; width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
+    font: inherit; font-size: 16px; color: var(--fg-soft); background: none;
+    border: 0; border-radius: 10px; cursor: pointer;
+  }
+  .mobile-topbar .tb-btn:active { background: var(--bubble); }
+  .mobile-topbar .tb-title {
+    flex: 1 1 auto; min-width: 0; text-align: left;
+    font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .admin-layout { display: block; padding-top: 48px; min-height: 100vh; }
+
+  /* 抽屉 = 原侧边栏：固定定位滑入滑出（translateX 收起在屏幕外） */
+  .sidebar {
+    position: fixed; top: 48px; bottom: 0; left: 0; z-index: 70;
+    width: min(84vw, 300px) !important; height: auto;
+    padding: 14px 12px !important;
+    border-right: 1px solid var(--border); border-radius: 0 18px 18px 0;
+    box-shadow: 12px 0 32px rgba(0, 0, 0, .14);
+    transform: translateX(-106%); transition: transform .22s var(--ease-out);
+  }
+  body.drawer-open .sidebar { transform: none; }
+  .drawer-mask {
+    display: block; position: fixed; inset: 48px 0 0 0; z-index: 65;
+    background: rgba(17, 18, 19, .32); opacity: 0; pointer-events: none;
+    transition: opacity .2s ease;
+  }
+  body.drawer-open .drawer-mask { opacity: 1; pointer-events: auto; }
+  /* 抽屉里不再要桌面端的折叠按钮 / 分隔线；side-collapsed（桌面瘦身态）的样式全部撤销 */
+  .brand-tools, #split-sidebar, .sidebar-expand { display: none !important; }
+  body.side-collapsed .sidebar { width: min(84vw, 300px) !important; padding: 14px 12px !important; }
+  body.side-collapsed .sidebar-brand { flex-direction: row; gap: 9px; padding: 4px 6px 14px; }
+  body.side-collapsed .sidebar-brand .brand-name,
+  body.side-collapsed .sidebar-item-sub { display: block; }
+  body.side-collapsed .sidebar-switch { display: flex; }
+  body.side-collapsed .sidebar-outline { display: block; }
+  body.side-collapsed .sidebar-item { padding: 10px 12px; text-align: left; }
+  body.side-collapsed .sidebar-item-title { font-size: 13.5px; }
+  body.side-collapsed .sidebar-settings { justify-content: flex-start; padding: 8px 10px; margin: 0 -10px; }
+  body.side-collapsed .sidebar-settings span:not(.sidebar-user-avatar) { display: inline; }
+
+  .admin-main { padding: 14px 12px 40px; }
+  .admin-main.editing { height: calc(100vh - 48px); padding: 0; }
+
+  /* ---- 通用紧凑 ---- */
+  .panel-head { gap: 10px; margin-bottom: 12px; }
+  .panel-head h2 { font-size: 17px; margin-bottom: 4px; }
+  .panel-sub { font-size: 11.5px; line-height: 1.7; }
+  .panel-head .primary-btn, .panel-head .ghost-btn { flex: 0 0 auto; }
+  .head-actions { flex-direction: column; align-items: stretch; }
+  .grid2 { grid-template-columns: 1fr; }
+  .page-panel { margin: 0; }
+  .settings-back { display: none; }        /* 返回并入顶栏 ← */
+  .modal-mask { padding: 14px; align-items: flex-end; }   /* 弹窗贴底：拇指好够到 */
+  .modal-card { width: 100%; max-height: 86vh; }
+  .toast { bottom: 24px; }
+
+  /* ---- 问卷 / 实验列表：大表格 → 紧凑卡片 ----
+     （列表表格是 $main 的直接子节点；数据页表格在 .data-panel 里，选择器分开） */
+  .admin-main > .data-table-wrap { border: 0; border-radius: 0; overflow: visible; }
+  .admin-main > .data-table-wrap table.data-table,
+  .admin-main > .data-table-wrap .data-table tbody { display: block; }
+  .admin-main > .data-table-wrap .data-table thead { display: none; }
+  .admin-main > .data-table-wrap .data-table tbody tr {
+    display: block; padding: 9px 11px 10px; margin-bottom: 8px;
+    border: 1px solid var(--border); border-radius: 13px; background: #fff;
+  }
+  .admin-main > .data-table-wrap .data-table tbody tr td { display: block; padding: 2px 0; border-bottom: 0; font-size: 12.5px; }
+  .q-link-cell, .link-row { min-width: 0; }
+  .admin-main > .data-table-wrap .data-table td.q-link-cell { margin-top: 5px; }
+  .link-row input { font-size: 11px; padding: 6px 8px; }
+  .link-row .ghost-btn { font-size: 11px; padding: 6px 10px; }
+  /* meta 行：问卷列表 = 题目数(3) · 数据量(4) · 创建时间(5)；实验列表 = 题目数(3) · 被问卷引用(4)。
+     行内排布 + 间隔点（列表表格在 JS 里分别挂 .q-table / .exp-table 类） */
+  .admin-main > .data-table-wrap .q-table td:nth-child(3),
+  .admin-main > .data-table-wrap .q-table td:nth-child(4),
+  .admin-main > .data-table-wrap .q-table td:nth-child(5),
+  .admin-main > .data-table-wrap .exp-table td:nth-child(3),
+  .admin-main > .data-table-wrap .exp-table td:nth-child(4) { display: inline; font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .admin-main > .data-table-wrap .q-table td:nth-child(4)::before,
+  .admin-main > .data-table-wrap .q-table td:nth-child(5)::before,
+  .admin-main > .data-table-wrap .exp-table td:nth-child(4)::before { content: "·"; margin: 0 6px; color: var(--faint); }
+  /* 实验列表第 2 列是「模板 ID」，与名称里的短码重复 → 手机上不显示 */
+  .admin-main > .data-table-wrap .exp-table td:nth-child(2) { display: none; }
+  /* 操作行：等宽小按钮铺满一行 */
+  .admin-main > .data-table-wrap .row-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .admin-main > .data-table-wrap .row-actions .ghost-btn {
+    flex: 1 1 0; min-width: 0; text-align: center; padding: 6px 0; font-size: 11.5px;
+  }
+
+  /* ---- 数据页：会话表格 → 紧凑卡片 ----
+     行结构：第1列勾选框（仅删除模式）· 2 编号 · 3 状态 · 4 进度 · 5 开始 · 6 结束 · 7 时长 */
+  .data-panel { max-width: none; }
+  .data-panel .data-table-wrap { border: 0; border-radius: 0; overflow: visible; }
+  .data-panel .data-table, .data-panel .data-table tbody { display: block; }
+  .data-panel .data-table thead { display: none; }
+  .data-panel .data-table tbody tr {
+    display: block; padding: 9px 11px 10px; margin-bottom: 8px;
+    border: 1px solid var(--border); border-radius: 13px; background: #fff;
+  }
+  .data-panel .data-table tbody tr::after { content: ""; display: block; clear: both; }
+  .data-panel .data-table tbody tr td { padding: 2px 0; border-bottom: 0; }
+  .data-panel .data-table td.check-col { display: inline-block; width: auto; padding: 2px 8px 2px 0; }
+  .data-panel .data-table tbody tr td:nth-child(2) { display: inline; font-size: 13.5px; font-weight: 600; }   /* 编号 */
+  .data-panel .data-table tbody tr td:nth-child(3) {                                                           /* 状态徽标 */
+    display: inline-block; margin-left: 8px; padding: 1px 8px; vertical-align: 1px;
+    font-size: 10.5px; font-weight: 600; color: var(--fg-soft);
+    background: var(--bubble); border-radius: 999px;
+  }
+  .data-panel .data-table tbody tr td:nth-child(4) { float: right; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }   /* 进度 */
+  .data-panel .data-table tbody tr td:nth-child(5),
+  .data-panel .data-table tbody tr td:nth-child(6),
+  .data-panel .data-table tbody tr td:nth-child(7) { display: inline; font-size: 11px; color: var(--muted); white-space: nowrap; }   /* 开始 · 结束 · 时长 */
+  .data-panel .data-table tbody tr td:nth-child(6)::before,
+  .data-panel .data-table tbody tr td:nth-child(7)::before { content: "·"; margin: 0 5px; color: var(--faint); }
+  .data-filters { flex-wrap: wrap; }
+
+  /* ---- 会话详情：作答明细 7 列表 → 小卡 ----
+     行结构：1 题目(cell-strong) · 2 题型 · 3 作答 · 4 对错 · 5 呈现 · 6 作答 · 7 耗时 */
+  .resp-table tbody tr td { display: inline; padding: 0; border-bottom: 0; font-size: 12.5px; }
+  .resp-table tbody tr td.cell-strong { display: inline; font-size: 13px; }
+  .resp-table tbody tr td:nth-child(2)::before,
+  .resp-table tbody tr td:nth-child(3)::before { content: "·"; margin: 0 5px; color: var(--faint); }
+  .resp-table tbody tr td:nth-child(4) { margin-left: 6px; font-weight: 600; }
+  .resp-table tbody tr td:nth-child(5)::before { content: "·"; margin: 0 5px 0 8px; color: var(--faint); }
+  .resp-table tbody tr td:nth-child(5),
+  .resp-table tbody tr td:nth-child(6),
+  .resp-table tbody tr td:nth-child(7) { font-size: 10.5px; color: var(--faint); }
+  .meta-grid { gap: 6px; grid-template-columns: 1fr 1fr; }
+  .meta-item { padding: 7px 9px; }
+  .msg-item { padding: 8px 10px; }
+
+  /* ---- 用户管理：表格 → 行卡片 ---- */
+  table.users-table, .users-table tbody { display: block; }
+  .users-table thead { display: none; }
+  .users-table tbody tr {
+    display: block; padding: 9px 11px 10px; margin-bottom: 8px;
+    border: 1px solid var(--border); border-radius: 13px; background: #fff;
+  }
+  .users-table tbody tr td { display: block; padding: 2px 0; border-bottom: 0; }
+  .users-table tbody tr td:nth-child(2) { display: inline-block; margin-left: 8px; padding: 1px 8px; vertical-align: 1px; font-size: 10.5px; font-weight: 600; color: var(--fg-soft); background: var(--bubble); border-radius: 999px; }
+  .users-table tbody tr td:nth-child(3) { display: inline; margin-left: 8px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .users-table tbody tr td:last-child { display: flex; gap: 8px; margin-top: 7px; }
+  .users-table tbody tr td:last-child .mini-btn { flex: 1 1 0; margin-right: 0; }
+
+  /* ---- 编辑页：返回并入顶栏、无手机预览列、题卡收紧 ---- */
+  .editor-head { display: none; }
+  .editor-cols { flex-direction: column; padding: 0 10px; }
+  .editor-cols > .splitter, .editor-cols > .phone-col { display: none !important; }
+  .editor-scroll { max-width: none; }
+  .editor-actionbar { gap: 8px; padding: 5px 0 9px; margin-bottom: 10px; }
+  .editor-actionbar-title { font-size: 14px; }
+  .editor-actionbar-right { gap: 7px; }
+  .editor-actionbar-right .hint { display: none; }
+  .qcard { padding: 9px 11px; margin-bottom: 8px; border-radius: 12px; }
+  .qcard-head { gap: 7px; }
+  .qtitle { font-size: 14.5px; }
+  .qsum { margin-top: 4px; }
+  .qbody { margin-top: 8px; padding-top: 8px; }
+  .section { margin-bottom: 16px; }
+  .section-head { margin-bottom: 4px; }
+  .field { margin-bottom: 9px; }
+  .field > span { margin-bottom: 5px; }
+  .field input[type=text], .field input[type=number], .field textarea, .field select { padding: 8px 11px; }
+  .param-row { padding: 4px 0; }
+  .insert-row { flex-wrap: wrap; }
+  .add-row { gap: 7px; margin-top: 10px; padding-top: 10px; }
+  .add-row .ghost-btn, .add-row .mini-btn { flex: 1 1 auto; }
+  .editor-foot { padding: 10px 12px; gap: 8px; flex-wrap: wrap; }
+  /* 手机预览列兜底隐藏（正常手机分支不会创建该列） */
+  .phone-col { display: none !important; }
+}

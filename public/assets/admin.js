@@ -868,6 +868,8 @@ async function submitLogin(e) {
     await enterAdmin();
   } catch (err) {
     showLoginError(err.message || '登录失败，请重试');
+  } finally {
+    // 成功也要恢复：否则「登录 → 退出登录」后按钮还是禁用态，用户无法再登录
     btn.disabled = false;
   }
 }
@@ -889,7 +891,8 @@ async function submitRegister(e) {
     await enterAdmin();
   } catch (err) {
     showRegError(err.message || '注册失败，请重试');
-    btn.disabled = false;
+  } finally {
+    btn.disabled = false;                        // 同登录按钮：成功也要恢复，注册后再注册才点得动
   }
 }
 
@@ -970,12 +973,23 @@ function handleRoute() {
   if (route.view === 'settings' || route.view === 'users') {
     state.view = route.view;
     setSidebarMode('menu');
+    setTopbar(route.view === 'settings' ? '个人设置' : '用户管理');
+    setTopbarBack(route.view === 'settings');       // 设置页有「← 返回」；用户管理没有
     if (route.view === 'settings') renderSettings();
     else renderUsers();
     window.scrollTo(0, 0);
     return;
   }
   state.view = route.section === 'exp' ? (editing ? 'exp-editor' : 'exp-list') : route.view === 'list' ? 'q-list' : route.view === 'editor' ? 'q-editor' : route.view === 'data' ? 'q-data' : 'q-session';
+
+  // 手机端顶栏：列表页在这里给标题；编辑 / 数据 / 会话页等数据加载完由各渲染器（或 editorShell）设置
+  if (route.view === 'list') {
+    setTopbar(route.section === 'exp' ? '实验管理' : '问卷管理');
+    setTopbarBack(false);
+  } else {
+    setTopbar('加载中…');
+    setTopbarBack(true);
+  }
 
   // 进入编辑页默认切到大纲；回到列表 / 数据页切回菜单
   // 列表 / 数据页切回菜单；编辑页在题目加载完成后再切到大纲（见 renderExpEditor / renderQEditor）
@@ -1020,6 +1034,32 @@ function setSidebarMode(mode) {
 
 $segMenu.addEventListener('click', () => setSidebarMode('menu'));
 $segOutline.addEventListener('click', () => setSidebarMode('outline'));
+
+/* ---------------------------------------------------------------- 手机端：顶栏 + 抽屉（≤720px） */
+
+const mqlMobile = window.matchMedia('(max-width: 720px)');
+const isMobile = () => mqlMobile.matches;
+function setTopbar(title) { $('tb-title').textContent = title; }
+function setTopbarBack(show) { $('tb-back').classList.toggle('hidden', !show); }
+function closeDrawer() { document.body.classList.remove('drawer-open'); }
+$('tb-menu').addEventListener('click', () => document.body.classList.toggle('drawer-open'));
+$('tb-back').addEventListener('click', () => {
+  // 顶栏 ← 等价于页面里那个返回按钮（编辑页「← 返回列表」/ 数据页「← 返回…」/ 设置页「← 返回」）：
+  // 直接点它，未保存确认弹窗等原有逻辑全部保留（手机端那个按钮被 CSS 隐藏，但仍在 DOM 里可点）
+  const back = $main.querySelector('.editor-head button, .settings-back');
+  if (back) back.click();
+});
+$('drawer-mask').addEventListener('click', closeDrawer);
+// 抽屉里点了菜单项 / 设置 / 大纲行：跳转的同时自动收起（「菜单 / 大纲」分段切换不收，方便接着点）
+document.querySelector('.sidebar').addEventListener('click', (e) => {
+  if (!isMobile()) return;
+  if (e.target.closest('.sidebar-item, #btn-settings, .ol-item')) closeDrawer();
+});
+// 跨过 720px 断点：收起抽屉；非编辑页直接重渲染换布局（编辑页不动，避免丢未保存内容）
+mqlMobile.addEventListener('change', () => {
+  closeDrawer();
+  if (!$('admin-view').classList.contains('hidden') && !currentEditing()) handleRoute();
+});
 
 /* ---------------------------------------------------------------- 三栏布局：拖动分隔线 / 菜单栏折叠与缩放 */
 
@@ -1142,6 +1182,14 @@ function restoreOutlineOnEnter() {
   const items = target.items || [];
   const known = new Set(items.map((x) => x.id));
   outlineCollapsed.clear();
+  if (isMobile()) {
+    // 手机端：每次进入都默认折叠到最高层（小屏上整棵大纲铺开几乎不可用，也不恢复本机的展开 / 选中位置）。
+    // 抽屉里点 ▸ 仍可临时展开看下属；点大纲行跳到该题并收起抽屉
+    for (const id of outlineDefaultCollapsed(items)) outlineCollapsed.add(id);
+    renderOutline();
+    syncOutlineActive();
+    return;
+  }
   const ids = saved && Array.isArray(saved.collapsed) ? saved.collapsed : outlineDefaultCollapsed(items);
   for (const id of ids) if (known.has(id)) outlineCollapsed.add(id);
   renderOutline();
@@ -2676,6 +2724,8 @@ window.addEventListener('resize', () => fitPhoneScale());
 function editorShell({ title, backHash, saveLabel, hint, body, phoneTitle, withTrial, onSave, isDirty, barButtons }) {
   $main.className = 'admin-main editing';
   $main.innerHTML = '';
+  setTopbar(title);              // 手机端顶栏显示当前问卷 / 模板名；返回键走顶栏 ←
+  setTopbarBack(true);
 
   const head = el('div', 'editor-head');
   const back = el('button', 'ghost-btn', '← 返回列表');
@@ -2762,6 +2812,7 @@ function editorShell({ title, backHash, saveLabel, hint, body, phoneTitle, withT
     });
     bar.appendChild(speedSel);
     var previewSpeedSel = speedSel;
+    var speedSelEl = speedSel;                     // 手机端全屏预览层复用（提层时一起搬走）
   }
   col.appendChild(bar);
   col.appendChild(el('p', 'phone-note', withTrial
@@ -2914,14 +2965,48 @@ function editorShell({ title, backHash, saveLabel, hint, body, phoneTitle, withT
     }
   };
   refreshBtn.onclick = () => reloadPreview();
-  window.setTimeout(() => { fitPhoneScale(); reloadPreview(); }, 0);
+
+  // 手机端全屏预览层：顶部一条 = 关闭 / 刷新 / 进度条 / 倍速；下面整块 = 真被试端 iframe 1:1 铺满
+  // （不再缩小成手机壳，也没有多余留白——窗口多大，被试端就多大）。
+  // 只在第一次点「预览」时创建并建预览会话；关闭只是隐藏，元素与 iframe 都留着（重复打开不重载）。
+  let pvLayerEl = null;
+  const openPreviewLayer = () => {
+    if (!pvLayerEl) {
+      pvLayerEl = el('div', 'pv-layer');
+      const top = el('div', 'pv-top');
+      const close = el('button', 'pv-close', '✕');
+      close.type = 'button';
+      close.title = '关闭预览，回到编辑';
+      close.onclick = () => pvLayerEl.classList.add('hidden');
+      top.append(close, refreshBtn);
+      if (withTrial) top.appendChild(scrubWrap);     // 进度条 + 第 x / y 题（题号输入框在层内收起）
+      if (speedSelEl) top.appendChild(speedSelEl);
+      const pvBody = el('div', 'pv-body');
+      pvBody.appendChild(holder);
+      pvLayerEl.append(top, pvBody);
+      document.body.appendChild(pvLayerEl);
+    }
+    pvLayerEl.classList.remove('hidden');
+    if (!previewCtl.url) reloadPreview();          // 首次打开才建预览会话（手机端进编辑页不预载）
+  };
+
+  if (isMobile()) {
+    // 手机端：不渲染手机预览列（屏幕放不下），预览收进操作条上的「预览」按钮
+    const pvOpenBtn = el('button', 'ghost-btn', '预览');
+    pvOpenBtn.type = 'button';
+    pvOpenBtn.title = '全屏打开被试端预览（所见即真机，不落库）';
+    pvOpenBtn.onclick = () => openPreviewLayer();
+    barRight.insertBefore(pvOpenBtn, save);
+  } else {
+    window.setTimeout(() => { fitPhoneScale(); reloadPreview(); }, 0);
+  }
   requestAnimationFrame(fitPhoneScale);
-  // 编辑栏与手机栏之间的分隔线  // 编辑栏与手机栏之间的分隔线：拖动调整手机栏宽度（双击复位）
+  // 编辑栏与手机栏之间的分隔线：拖动调整手机栏宽度（双击复位）。手机端不渲染预览列，也没有这条线
   const split = el('div', 'splitter');
   split.title = '拖动调整手机预览宽度 · 双击复位';
   split.addEventListener('mousedown', (e) => startDrag(e, 'phone'));
   split.addEventListener('dblclick', () => { saveLayout({ phone: LAYOUT_DEF.phone }); toast('手机栏宽度已复位'); });
-  cols.append(split, col);
+  if (!isMobile()) cols.append(split, col);
   $main.appendChild(cols);
   // 编辑区内容渲染完之后同步一次大纲高亮（否则首次进入时大纲不会跟随定位）
   requestAnimationFrame(() => syncOutlineActive());
@@ -2934,11 +3019,15 @@ function editorShell({ title, backHash, saveLabel, hint, body, phoneTitle, withT
     const m = ((previewCtl && previewCtl.url) || '').match(/preview=([^&]+)/);
     if (m) api('/api/preview/destroy', { body: { previewId: decodeURIComponent(m[1]) } }).catch(() => {});
     if (previewCtl === ctl) previewCtl = null;
+    if (pvLayerEl) { pvLayerEl.remove(); pvLayerEl = null; }   // 全屏预览层随编辑页一起销毁
   };
   editorShellDispose = dispose;
 
   // setTitle：保存后不退出编辑页时，用来把顶部标题同步成新名字
-  const setTitle = (text) => { actionBar.querySelector('.editor-actionbar-title').textContent = text; };
+  const setTitle = (text) => {
+    actionBar.querySelector('.editor-actionbar-title').textContent = text;
+    setTopbar(text);
+  };
   return { saveBtn: save, scroll, reloadPreview, dispose, setTitle };
 }
 
@@ -2963,7 +3052,7 @@ function renderExpList() {
     return;
   }
   const wrap = el('div', 'data-table-wrap');
-  const table = el('table', 'data-table');
+  const table = el('table', 'data-table exp-table');
   const thead = el('thead');
   const tr = el('tr');
   for (const t of ['实验名称', '模板 ID', '题目数', '被问卷引用', '操作']) tr.appendChild(el('th', '', t));
@@ -3271,7 +3360,7 @@ function renderQList() {
     return;
   }
   const wrap = el('div', 'data-table-wrap');
-  const table = el('table', 'data-table');
+  const table = el('table', 'data-table q-table');
   const thead = el('thead');
   const tr = el('tr');
   for (const t of ['问卷名称', '被试链接', '题目数', '数据量', '创建时间', '操作']) tr.appendChild(el('th', '', t));
@@ -3545,6 +3634,8 @@ async function renderQData(id) {
   // 口径 = 题号（与编辑器的「题目编排（N 道）」一致）：材料消息与页面环节（知情同意 / 确认 / 结束说明）不占题号
   const { questionnaire, sessions, totalQuestions } = data;
   const qCount = questionCount(questionnaire.items);
+  setTopbar(`${questionnaire.title} · 数据`);      // 手机端顶栏
+  setTopbarBack(true);
 
   const panel = el('div', 'data-panel');
   const phead = el('div', 'panel-head');
@@ -3765,6 +3856,8 @@ async function renderQSession(id, sid) {
     return;
   }
   const { questionnaire, session, messages, responses } = data;
+  setTopbar(`${questionnaire.title} · 被试 #${session.seq == null ? '—' : session.seq}`);   // 手机端顶栏
+  setTopbarBack(true);
 
   const panel = el('div', 'data-panel');
   const ph = el('div', 'panel-head');
@@ -3792,7 +3885,7 @@ async function renderQSession(id, sid) {
 
   const secResp = sectionHead('作答明细', '按题目顺序排列；呈现/作答时间为服务端记录，耗时为前端上报。');
   const tw = el('div', 'data-table-wrap');
-  const table = el('table', 'data-table');
+  const table = el('table', 'data-table resp-table');
   const thead = el('thead');
   const tr = el('tr');
   for (const t of ['题目', '题型', '作答', '对错', '呈现时间', '作答时间', '耗时']) tr.appendChild(el('th', '', t));
