@@ -318,7 +318,7 @@ sudo certbot --nginx -d glfsc.ltd
   ```
 
   目录不存在时会自动创建（但需要写权限，所以上面先 mkdir + chown 更稳）。
-  同一环境变量对 `npm run reset-db`、`npm run check`、`npm run portable` 等脚本同样生效，改动后记得重启服务。
+  同一环境变量对 `npm run reset-db`、`npm run check` 等脚本同样生效，改动后记得重启服务。
   迁移现有数据：停服后把 `data.db`（含 `-wal`/`-shm`）搬到新位置，再用 `DB_PATH` 启动。
 
 ---

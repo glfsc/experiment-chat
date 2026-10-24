@@ -31,3 +31,6 @@ documents/
 .zcode/
 # Office 临时锁文件
 ~$*
+
+# 构建产物（上线包等）
+dist/

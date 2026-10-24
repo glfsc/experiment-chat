@@ -2,7 +2,7 @@
 // 走的是被试端真实接口（/api/session → /api/step → /api/finish），与手机扫码提交完全同一条路径，
 // 因此可用于在电脑上完整验证「被试提交 → 管理端数据页可见 → 导出 Excel」这条链路。
 //
-// 用法：先启动服务（npm start，或双击「启动预实验.bat」），再执行：
+// 用法：先启动服务（npm start），再执行：
 //   node scripts/simulate-subjects.js                 # 对第一份问卷模拟 5 位被试（快速模式）
 //   node scripts/simulate-subjects.js --n 20          # 模拟 20 位
 //   node scripts/simulate-subjects.js --q uegnugph    # 指定问卷 id（用 --list 查看）

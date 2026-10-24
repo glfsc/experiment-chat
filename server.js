@@ -2462,9 +2462,9 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   const urls = lanAddresses().map(entryUrl);
-  console.log('实验平台已启动（局域网预实验模式）');
+  console.log('实验平台已启动（服务器部署模式）');
   console.log(`  管理端：http://localhost:${PORT}/（根路径就是管理端，未登录时先显示登录卡片）`);
-  if (urls.length) console.log(`  同局域网手机打开管理端：${urls.join('   ')}`);
+  if (urls.length) console.log(`  本机内网地址（本机调试用）：${urls.join('   ')}`);
   console.log('  · 各组被试链接 / 二维码在管理端「问卷管理」生成（可保存成图片打印或发给被试）。');
   console.log('  停止服务：关闭本窗口（进行中的被试会话数据已实时落库，不会丢失）。');
   if (process.env.OPEN_PAGE === '1') {
