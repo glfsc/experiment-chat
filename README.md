@@ -7,7 +7,7 @@
 一台 1 核 1G 的小服务器就够跑一场实验：不用装数据库，也不用 `npm install`。
 
 > 本分支 `main` = **服务器部署版**（域名 + HTTPS，正式实验）。
-> 局域网现场用的「双击启动 + 内置 node.exe」便携包已冻结在 `pilot/lan-qrcode` 分支（标签 `pilot-lan-v1.2`），
+> 局域网现场用的「双击启动 + 内置 node.exe」便携包已冻结在 `local-lan` 分支（标签 `pilot-lan-v1.2`），
 > 本分支不再维护便携包；二维码、管理端与其余功能与它一致。
 
 ---
@@ -84,7 +84,7 @@ node server.js     # 等价 npm start；默认端口 3000，可用环境变量 P
 - **账号登录规则（一账号单设备）**：同一账号同时只允许一台设备在线 —— 在别处登录、本人改密、或管理员重置该账号密码，先前设备上的登录会立即失效（切回登录卡片并提示原因）；登出是持久化生效的，重启服务不会复活旧登录态。
 - 入口：`/` = 管理端（未登录时显示登录卡片，卡片底部一行可凭链接或短码进被试端，无需登录；`/admin` 等价）· `/chat?q=<8位短码>` 被试端。被试二维码在管理端「问卷管理」按组生成。
 - 部署到服务器见 [DEPLOY.md](DEPLOY.md)：本站在用 **Windows Server + 计划任务 `LLM_in_dm`**（应用目录 `C:\apps\experiment-chat\LLM_in_dm`）；更新流程 = 本地 `npm run deploy` → 把 `dist/上线包.zip` 传到 `C:\apps\experiment-chat\update\` → 执行 `C:\apps\experiment-chat\update.cmd nopause`（自动备份库、覆盖代码、重启、自检）。改了问卷文案/参数还要再跑一次 `node scripts\sync-group-content.js --apply`。
-- 局域网便携包（双击启动、内置 `node.exe`）不在本分支维护，已冻结在 `pilot/lan-qrcode`；需要现场版本时用标签 `pilot-lan-v1.2` 检出。
+- 局域网便携包（双击启动、内置 `node.exe`）不在本分支维护，已冻结在 `local-lan`（原 `pilot/lan-qrcode`）；需要现场版本时用标签 `pilot-lan-v1.2` 检出。
 
 ---
 

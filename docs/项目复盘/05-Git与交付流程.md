@@ -35,7 +35,7 @@ git remote add origin git@github.com:<you>/<repo>.git
 git push -u origin main
 ```
 
-> 本仓库的远程是 `git@github.com:glfsc/LLM.git`，主分支 `main`，另有长期分支 `pilot/lan-qrcode`。
+> 本仓库的远程是 `git@github.com:glfsc/experiment-chat.git`，主分支 `main`，另有长期分支 `local-lan`。
 
 ### 2.1 第一次提交前检查
 
@@ -216,7 +216,7 @@ ccf27ec 2026-10-17 上线版V1.2：新增实验助手头像和名称更改
 
 - 有些 commit 混了多个改动（如"修复 + 加功能 + 打包"），回滚粒度不够；
 - 没有 tag，无法一眼定位"预实验用的到底是哪版"；
-- 长期分支 `pilot/lan-qrcode` 与 `main` 分叉，最后要手工剔除局域网部分（见第 5 节）。
+- 长期分支 `local-lan`（原名 `pilot/lan-qrcode`）与 `main` 分叉，最后要手工剔除局域网部分（见第 5 节）。
 
 > 【方法】历史不完美没关系，关键是**从现在开始**每个 commit 只做一件事，并给发布打 tag。
 
@@ -229,7 +229,7 @@ ccf27ec 2026-10-17 上线版V1.2：新增实验助手头像和名称更改
 ```text
 main
   └─ 公网正式版（7c312e5 剔除非局域网必需的部分）
-pilot/lan-qrcode
+local-lan（原名 pilot/lan-qrcode）
   └─ 局域网预实验版（二维码、便携包、启动器）
 ```
 
