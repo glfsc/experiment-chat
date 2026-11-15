@@ -1,0 +1,12 @@
+{
+  "name": "experiment-chat",
+  "version": "4.0.0",
+  "private": true,
+  "description": "零依赖的对话式问卷 / 实验平台：一切皆题目，支持手机作答、管理端编排与数据导出",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

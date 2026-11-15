@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>实验对话系统 · 管理端</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23111213'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23ffffff'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/assets/admin.css">
+</head>
+<body>
+  <!-- 未登录视图：管理端登录（进管理端）+ 问卷链接入口 + 备案号。
+       根路径 / 就是管理端页面，未登录时显示这一屏，登录后由脚本切到 #admin-view -->
+  <div id="login-view" class="login-view hidden">
+    <div class="login-stack">
+      <div class="login-card">
+        <div class="brand">
+          <span class="brand-dot" aria-hidden="true"></span>
+          <span class="brand-name">实验对话系统 · 管理端</span>
+        </div>
+
+        <!-- 登录 / 注册 / 重置说明三块互斥显示（由脚本切换） -->
+        <div id="login-block">
+          <h1>管理端登录</h1>
+          <p class="login-sub">登录后进入实验与问卷管理。</p>
+          <form id="login-form" autocomplete="off">
+            <input id="login-username" type="text" autocomplete="off" placeholder="账号">
+            <input id="login-password" type="password" autocomplete="new-password" placeholder="密码">
+            <label class="remember-row">
+              <input id="login-remember" type="checkbox">
+              <span>记住账号密码（30 天内免登录）</span>
+            </label>
+            <p id="login-error" class="login-error hidden"></p>
+            <button id="login-btn" class="primary-btn login-go" type="submit">登录</button>
+          </form>
+          <div class="login-links">
+            <button id="show-register" class="link-btn" type="button">注册新账号</button>
+            <button id="show-reset" class="link-btn" type="button">重置密码</button>
+          </div>
+        </div>
+
+        <div id="register-block" class="hidden">
+          <h1>注册新账号</h1>
+          <p class="login-sub">注册后即可登录并创建自己的实验与问卷。</p>
+          <form id="register-form" autocomplete="off">
+            <input id="reg-username" type="text" maxlength="32" autocomplete="username" placeholder="账号">
+            <input id="reg-password" type="password" autocomplete="new-password" placeholder="密码（至少 10 位）">
+            <input id="reg-password2" type="password" autocomplete="new-password" placeholder="确认密码">
+            <p id="reg-error" class="login-error hidden"></p>
+            <button id="reg-btn" class="primary-btn login-go" type="submit">注册并登录</button>
+          </form>
+          <div class="login-links">
+            <button id="back-login" class="link-btn" type="button">返回登录</button>
+            <span></span>
+          </div>
+        </div>
+
+        <div id="reset-block" class="hidden">
+          <h1>重置密码</h1>
+          <p class="login-sub">
+            为保障数据安全，密码重置需要管理员协助处理。<br>
+            请联系实验管理员，提供您的账号，由管理员在「设置 → 用户管理」中为您重置密码。
+          </p>
+          <div class="login-links">
+            <button id="back-login2" class="link-btn" type="button">返回登录</button>
+            <span></span>
+          </div>
+        </div>
+
+        <!-- 问卷入口：一行就够，被试拿到链接或短码后直接进作答页（无需登录） -->
+        <form id="survey-form" class="survey-line" autocomplete="off">
+          <label class="survey-label" for="survey-code">填写问卷</label>
+          <input id="survey-code" type="text" autocomplete="off" placeholder="粘贴问卷链接或输入短码">
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 管理视图：左侧边栏（菜单 / 大纲两种模式复用）+ 右侧内容区（未登录时由脚本切到上面的登录卡片） -->
+  <div id="admin-view" class="admin-layout hidden">
+    <!-- 手机端顶栏：（编辑类页面）返回 + ☰ 打开抽屉（= 侧边栏）+ 页面标题；桌面端隐藏 -->
+    <header class="mobile-topbar" id="mobile-topbar">
+      <button id="tb-back" class="tb-btn hidden" type="button" title="返回" aria-label="返回">←</button>
+      <button id="tb-menu" class="tb-btn" type="button" title="打开菜单" aria-label="打开菜单">☰</button>
+      <span id="tb-title" class="tb-title">实验对话系统</span>
+    </header>
+    <!-- 手机端抽屉遮罩：点它收起抽屉（由 body.drawer-open 控制显隐，桌面端不渲染效果） -->
+    <div id="drawer-mask" class="drawer-mask" aria-hidden="true"></div>
+
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <span class="brand-dot" aria-hidden="true"></span>
+        <span class="brand-name">实验对话系统<br>管理端</span>
+        <span class="brand-tools">
+          <button id="btn-side-collapse" class="icon-btn" type="button" title="折叠 / 展开菜单栏">«</button>
+        </span>
+      </div>
+      <div class="sidebar-switch">
+        <button class="seg on" id="seg-menu" type="button">菜单</button>
+        <button class="seg" id="seg-outline" type="button">大纲</button>
+      </div>
+      <nav class="sidebar-nav" id="sidebar-menu">
+        <a class="sidebar-item" data-nav="q" href="#/q">
+          <span class="sidebar-item-title">问卷管理</span>
+          <span class="sidebar-item-sub">链接 · 题目编排 · 数据</span>
+        </a>
+        <a class="sidebar-item" data-nav="exp" href="#/exp">
+          <span class="sidebar-item-title">实验管理</span>
+          <span class="sidebar-item-sub">模板库 · 可复用题目组合</span>
+        </a>
+      </nav>
+      <div class="sidebar-outline hidden" id="sidebar-outline"></div>
+      <div class="sidebar-bottom">
+        <button id="btn-settings" class="sidebar-settings" type="button" title="个人设置">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>设置</span>
+          <!-- 行最右侧：当前登录账号的头像（未上传时显示用户名首字母），由脚本填充 -->
+          <span id="sidebar-user-avatar" class="sidebar-user-avatar" aria-hidden="true"></span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- 三栏之间可拖动的分隔线（默认浅色，悬停/拖动高亮；双击复位） -->
+    <div class="splitter" id="split-sidebar" title="拖动调整菜单栏宽度 · 双击复位"></div>
+
+    <main class="admin-main" id="admin-main"></main>
+  </div>
+
+  <!-- 新建 / 复制 / 删除确认弹窗 -->
+  <div id="modal" class="modal-mask hidden">
+    <div class="modal-card">
+      <h3 id="modal-title">新建</h3>
+      <div id="modal-body" class="modal-body"></div>
+      <p id="modal-error" class="modal-error hidden"></p>
+      <div class="modal-actions">
+        <button id="modal-cancel" class="ghost-btn" type="button">取消</button>
+        <button id="modal-confirm" class="primary-btn" type="button">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+
+  <script src="/assets/richtext.js"></script>
+  <script src="/assets/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,429 @@
+/* 被试端样式：内联一问一答（题目卡片）+ 全屏页面 + 手机适配 */
+
+:root {
+  --fg: #111213;
+  --fg-soft: #3a3a3f;
+  --muted: #7a7a80;
+  --faint: #b3b3b9;
+  --border: #e8e8ea;
+  --border-strong: #c9c9ce;
+  --bubble: #f4f4f5;
+  --surface: #fafafa;
+  --accent: #111213;
+  --accent-hover: #2a2b2e;
+  --warn-fg: #8a5a00;
+  --warn-bg: #fdf6e9;
+  --warn-border: #f0e0c4;
+  --ok-fg: #0f7b3f;
+  --ok-bg: #eef7f0;
+  --shadow-soft: 0 4px 24px rgba(0, 0, 0, 0.06);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  --ease-out: cubic-bezier(0.21, 0.9, 0.35, 1);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; font-family: var(--font); color: var(--fg); background: #fff; -webkit-font-smoothing: antialiased;
+  /* 防「选中 → 复制 → 搜索」：内容区不可选中；输入框 / 文本域例外，否则被试没法改自己的答案。
+     注：网页无法阻止系统级截屏（Win+Shift+S / 手机截屏 / 拍照），只能挡住网页内这条路径。 */
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+}
+input, textarea, [contenteditable="true"] {
+  -webkit-user-select: text; user-select: text; -webkit-touch-callout: default;
+}
+@media print { body { visibility: hidden !important; } }   /* 防「打印成 PDF」导出内容 */
+.hidden { display: none !important; }
+
+#app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+/* ---------------------------------------------------------------- 顶栏 */
+.topbar { flex: 0 0 auto; border-bottom: 1px solid var(--border); background: #fff; }
+.topbar-inner { max-width: 860px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; gap: 12px; }
+.brand { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 1 1 auto; }
+.brand-dot { width: 18px; height: 18px; border-radius: 50%; background: var(--accent); position: relative; flex: 0 0 auto; }
+.brand-dot::after { content: ""; position: absolute; inset: 5.5px; border-radius: 50%; background: #fff; }
+/* 管理者设置了助手头像：品牌圆换成图片（隐藏默认白芯伪元素） */
+.brand-dot.has-img::after { content: none; }
+.brand-dot img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+.brand-name { font-size: 13.5px; font-weight: 600; white-space: nowrap; }
+.brand-sub {
+  font-size: 11.5px; color: var(--muted); border-left: 1px solid var(--border); padding-left: 9px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+.ghost-btn {
+  font: inherit; font-size: 12px; color: var(--fg-soft); background: #fff; border: 1px solid var(--border);
+  border-radius: 999px; padding: 6px 13px; cursor: pointer; white-space: nowrap; flex: 0 0 auto;
+  transition: border-color .16s ease, color .16s ease;
+}
+.ghost-btn:hover { border-color: var(--border-strong); color: var(--fg); }
+
+/* ---------------------------------------------------------------- 消息区 */
+.chat-scroll { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; }
+.chat-scroll::-webkit-scrollbar { width: 8px; }
+.chat-scroll::-webkit-scrollbar-thumb { background: #e4e4e7; border-radius: 8px; }
+.chat-stream {
+  max-width: 860px; margin: 0 auto; padding: 20px 20px 60px;
+  display: flex; flex-direction: column; gap: 14px;
+  contain: layout style;      /* 流式输出时把重排限制在消息流内部，减少掉帧 */
+}
+/* 消息出现只做淡入，不做位移（避免流式输出时整行“飘入”感） */
+.msg { display: flex; animation: fade-in .16s ease both; }
+.msg.user { justify-content: flex-end; }
+.msg.user .bubble {
+  background: var(--bubble); border-radius: 16px; padding: 11px 15px; max-width: 78%;
+  font-size: 16px; font-weight: 500; line-height: 1.75; word-break: break-word;   /* 小四：被试自己的输出 */
+}
+/* 占满整行（扣掉左侧圈圈图标）：宽度不能跟着内容走，否则思考面板流式输出时会边写边变宽 */
+.msg.ai { align-items: flex-start; gap: 10px; }
+.msg.ai .ai-body { max-width: calc(100% - 32px); flex: 1 1 auto; min-width: 0; }
+/* 对话形态：每条 AI 消息左侧一个系统圈圈（与顶栏品牌标识同构） */
+.ai-avatar {
+  flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--accent); position: relative; margin-top: 2px;
+}
+.ai-avatar::after { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: #fff; }
+/* 同顶栏：设置过助手头像时显示图片头像 */
+.ai-avatar.has-img::after { content: none; }
+.ai-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+.msg.ai .ai-text { font-size: 16px; font-weight: 500; line-height: 1.9; color: var(--fg-soft); word-break: break-word; }   /* 小四 */
+/* ---------------------------------------------------------------- 富文本正文（.rich）
+   管理端「类 Word」编辑器能用的格式，在这里一一落地：六级标题、加粗 / 斜体 / 下划线 / 删除线、
+   字号 / 字体色 / 背景色（内联样式直通）、对齐、有序 / 无序列表、引用、分割线。
+   正文容器加了 .rich，块级样式只作用在正文里，不影响界面本身。 */
+.rich { word-break: break-word; }
+.rich > :last-child { margin-bottom: 0; }
+.rich p { margin: 0 0 .72em; }
+.rich h1, .rich h2, .rich h3, .rich h4, .rich h5, .rich h6 { margin: .2em 0 .6em; line-height: 1.5; font-weight: 600; color: var(--fg); }
+/* 标题字号与编辑器（admin.css 的 .rich-edit h1-h6）逐档对齐：所见即所得 */
+.rich h1 { font-size: 20px; }
+.rich h2 { font-size: 17.5px; }
+.rich h3 { font-size: 16px; }
+.rich h4 { font-size: 15px; }
+.rich h5 { font-size: 14px; }
+.rich h6 { font-size: 13px; color: var(--fg-soft); }
+.rich ul, .rich ol { margin: 0 0 .72em; padding-left: 1.45em; }
+.rich li { margin: .18em 0; }
+.rich blockquote {
+  margin: 0 0 .72em; padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--border-strong); color: var(--muted);
+}
+.rich hr { border: 0; border-top: 1px solid var(--border); margin: .9em 0; }
+.rich a { color: inherit; text-decoration: underline; }
+/* 流式光标：文本尾部的行内元素，始终紧跟最后一个字 */
+.type-cursor {
+  display: inline-block; width: 2px; height: 15px; margin-left: 1px;
+  background: var(--fg); vertical-align: -2px; animation: blink 1s step-end infinite;
+}
+.thinking-line { display: flex; align-items: center; gap: 9px; }
+.thinking-label { font-size: 13px; color: var(--muted); }
+/* 「深度思考」徽标：黑色圆圈 + 旋转弧线 */
+.think-badge { width: 15px; height: 15px; flex: 0 0 auto; animation: spin 1.1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.typing { display: flex; gap: 4px; }
+.typing span { width: 5px; height: 5px; border-radius: 50%; background: var(--border-strong); animation: bounce 1.2s infinite; }
+.typing span:nth-child(2) { animation-delay: .18s; }
+.typing span:nth-child(3) { animation-delay: .36s; }
+
+/* ---------------------------------------------------------------- 深度思考面板
+   与正文同一行内：头部（徽标 + 用时）→ 思考内容（只在输出期间存在）→ 分割线 → 正文。
+   头部不可点击；思考内容播完即从 DOM 移除，样式只服务于「弹出」那一段。
+   思考内容比正文字号更小、颜色更灰、缩进更多。 */
+.think { display: flex; flex-direction: column; }
+.think-head {
+  display: inline-flex; align-items: center; gap: 7px; text-align: left;
+  font: inherit; font-size: 13px; line-height: 1.6; color: var(--muted);
+  background: none; border: 0; padding: 1px 0;
+}
+.think-label { font-variant-numeric: tabular-nums; }
+.think-spark { width: 14px; height: 14px; flex: 0 0 auto; }
+.think-body { display: block; }
+.think-inner {
+  margin: 9px 0 0 10px;                      /* 比正文多一层左缩进 */
+  padding: 13px 16px 13px 18px;
+  border: 1px solid var(--border); border-left: 2px solid var(--border-strong); border-radius: 12px;
+  background: var(--surface);
+  font-size: 14px; line-height: 1.85; color: #8a8a91;   /* 五号；正文小四 16px / #3a3a3f */
+  white-space: pre-wrap; word-break: break-word;
+}
+.think-divider { border-top: 1px solid var(--border); margin: 13px 0 12px; }
+/* 思考结束后的提示行：思考面板 → 分割线 → 「思考已完成」 → 正文 */
+.think-done { font-size: 13px; color: var(--muted); margin: -4px 0 10px; }
+
+/* ---------------------------------------------------------------- 退出重进卡片 / 时间已到
+   重进时先给一张确认卡片；时间已到则直接停止作答（作答能力销毁），只提示可以点顶部「重做」。 */
+.resume-card {
+  border: 1px solid var(--border-strong); border-radius: 16px; background: #fff;
+  padding: 16px 18px; box-shadow: var(--shadow-soft); animation: card-in .16s var(--ease-out) both;
+}
+.resume-title { font-size: 15.5px; font-weight: 600; margin-bottom: 8px; }
+.resume-text { font-size: 13.5px; line-height: 1.85; color: var(--fg-soft); margin-bottom: 14px; }
+.resume-actions { display: flex; gap: 10px; }
+.resume-actions .primary-btn, .resume-actions .ghost-btn { padding: 9px 20px; }
+.qcard.window-closed, .qmsg.window-closed { opacity: .94; }
+/* 时间已到：控件全部停用、提交入口撤掉，只留一句「请点重做」的提示 */
+.qcard.stopped { background: var(--surface); }
+.qcard.stopped .qcard-body { opacity: .72; }
+.qstopped-hint { flex: 1 1 100%; font-size: 12px; line-height: 1.7; color: var(--warn-fg); }
+
+/* ---------------------------------------------------------------- 消息式题面（文本题 / 两段文本题组）
+   题干就是一条 AI 消息；题号、倒计时、字数提示收在气泡下方的一行小字里，
+   作答在底部常驻输入框完成，提交后回答以「用户气泡」出现在下方。 */
+.qmsg { display: flex; flex-direction: column; }
+.qmsg.done { opacity: .92; }
+.qmsg-meta {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 8px; min-height: 22px;
+}
+.qmsg-meta .qnum { padding: 2px 9px; }
+.qmsg-note { font-size: 11.5px; color: var(--muted); }
+.qmsg .qcard-timer { font-size: 11px; padding: 2px 9px; }
+/* 已答题的用户气泡（作答回显）——与卡片一起受顶栏「隐藏 / 显示已答题」控制 */
+.msg.user.answered.answered-hidden { display: none; }
+
+/* ---------------------------------------------------------------- 阅读确认页（内联）
+   不再是全屏遮罩：内容照常留在聊天流里，确认按钮在下方，上面的反馈/材料仍可回看。 */
+.confirm-inline { border-left: 3px solid var(--border-strong); }
+.confirm-inline .qcard-body { padding-bottom: 2px; }
+.confirm-inline .qcard-foot { justify-content: flex-end; }
+
+/* ---------------------------------------------------------------- 题目卡片（一问一答） */
+.qcard {
+  border: 1px solid var(--border); border-radius: 16px; background: #fff;
+  padding: 15px 17px; animation: card-in .16s var(--ease-out) both;
+}
+.qcard.pending { border-color: var(--border-strong); box-shadow: var(--shadow-soft); }
+.qcard.locked { background: var(--surface); }
+.qcard-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.qnum {
+  flex: 0 0 auto; font-size: 11.5px; font-weight: 600; color: var(--fg-soft);
+  background: var(--bubble); border-radius: 999px; padding: 3px 10px;
+}
+.qtitle { flex: 1 1 auto; min-width: 0; font-size: 15.5px; font-weight: 600; line-height: 1.65; }
+.qcard-toggle { flex: 0 0 auto; }
+/* 题目右上角倒计时：门控期间显示「N 秒后可提交」，门控结束后显示作答倒计时「剩余 N 秒」 */
+.qcard-timer {
+  flex: 0 0 auto; font-size: 11.5px; font-weight: 600; color: var(--warn-fg);
+  background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: 999px;
+  padding: 3px 10px; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.qcard-timer.answering { color: #fff; background: var(--accent); border-color: var(--accent); }
+.qdone-mark {
+  flex: 0 0 auto; font-size: 11px; font-weight: 600; color: var(--ok-fg);
+  background: var(--ok-bg); border-radius: 999px; padding: 3px 9px;
+}
+.qtext { font-size: 16px; font-weight: 500; line-height: 1.85; color: var(--fg-soft); margin-bottom: 12px; }   /* 小四 */
+.qcard.done { background: var(--surface); border-color: var(--border); box-shadow: none; opacity: .82; }
+/* 输入框驱动的题：作答回显（卡片内原本没有输入控件） */
+.qcard-echo {
+  font-size: 16px; font-weight: 500; line-height: 1.85; color: var(--fg-soft);   /* 小四 */
+  word-break: break-word;
+  background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 11px 14px;
+}
+.qcard.done .qcard-head { margin-bottom: 8px; }
+.qcard.done.collapsed { padding: 11px 17px; }
+.qcard.done.collapsed .qcard-body { display: none; }
+.qcard.done.collapsed .qcard-head { margin-bottom: 0; }
+/* 已提交：控件保留为只读（选中态与内容就地展示），不置灰也不可再改 */
+.qcard-body.readonly { opacity: .92; }
+.qcard-body.readonly .answer-input,
+.qcard-body.readonly .answer-input:focus { background: #fff; cursor: default; }
+/* 已答题目默认整体隐藏：顶栏「显示已答题」或卡片上的「显示」按钮可临时恢复 */
+.qcard.done.answered-hidden { display: none; }
+/* 打分题重做中：卡片临时回到可改状态——高亮描边 + 不降透明度，与待答卡片一眼区分；
+   此刻徽标文字是「未提交」，warn 配色（黄）正对应这个语义；处置完回「✓ 已提交」（绿） */
+.qcard.redoing { background: #fff; border-color: var(--fg); box-shadow: var(--shadow-soft); opacity: 1; }
+.qcard.redoing .qdone-mark { color: var(--warn-fg); background: var(--warn-bg); }
+@keyframes redo-nudge {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+.qcard.redo-nudge { animation: redo-nudge .45s var(--ease-out); }
+.qcard-foot { display: flex; align-items: center; gap: 12px; margin-top: 13px; }
+.qfoot-hint { flex: 1 1 auto; font-size: 12px; line-height: 1.6; color: var(--warn-fg); }
+.qcard.locked .qfoot-hint { color: var(--muted); }
+
+/* 子题（题组） */
+.subs { display: flex; flex-direction: column; gap: 18px; }
+.subs.row { flex-direction: row; gap: 16px; }
+.subs.row .sub-control { flex: 1 1 0; min-width: 0; }
+.sub-title { font-size: 16px; font-weight: 600; color: var(--fg); margin-bottom: 9px; }   /* 小四 */
+.sub-note { font-size: 11.5px; font-weight: 400; color: var(--muted); margin-left: 4px; }
+.sub-anchor { font-size: 11.5px; color: var(--muted); margin-top: 7px; }
+.sub-count { font-size: 11.5px; color: var(--muted); text-align: right; margin-top: 5px; }
+.sub-count.near { color: #c03434; font-weight: 600; }
+
+/* 作答控件 */
+.opt-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.opt-row.one-col { grid-template-columns: 1fr; }
+.rating-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.option-btn, .rating-btn, .primary-btn, .mini-btn { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.option-btn {
+  font: inherit; font-size: 16px; line-height: 1.6; text-align: left; color: var(--fg-soft);   /* 小四 */
+  background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 11px 14px;
+  cursor: pointer; transition: border-color .16s ease, background .16s ease, color .16s ease;
+}
+.option-btn:hover:not(:disabled) { border-color: var(--border-strong); }
+.option-btn.selected { border-color: var(--accent); background: var(--accent); color: #fff; }
+.rating-btn {
+  font: inherit; font-size: 13.5px; width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center; color: var(--fg-soft);
+  background: #fff; border: 1px solid var(--border); border-radius: 50%;
+  cursor: pointer; transition: border-color .16s ease, background .16s ease, color .16s ease;
+}
+.rating-btn:hover:not(:disabled) { border-color: var(--border-strong); }
+.rating-btn.selected { border-color: var(--accent); background: var(--accent); color: #fff; }
+/* 门控期间控件照常可用：只有提交按钮置灰（见 .primary-btn:disabled） */
+
+.answer-input {
+  width: 100%; font: inherit; font-size: 16px; line-height: 1.85; color: var(--fg);   /* 小四 */
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 11px 14px; outline: none; resize: none; overflow: hidden;
+  transition: border-color .18s ease, background .18s ease, height .12s ease;
+}
+.answer-input:focus { border-color: var(--border-strong); background: #fff; }
+
+.rank-list { display: flex; flex-direction: column; gap: 8px; }
+.rank-item {
+  display: flex; align-items: center; gap: 10px; border: 1px solid var(--border);
+  border-radius: 12px; padding: 9px 12px; background: var(--surface);
+}
+.rank-seq { flex: 0 0 auto; min-width: 18px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.rank-label { flex: 1 1 auto; font-size: 16px; color: var(--fg-soft); }   /* 小四 */
+.mini-btn {
+  font: inherit; font-size: 11.5px; color: var(--fg-soft); background: #fff;
+  border: 1px solid var(--border); border-radius: 8px; padding: 4px 9px; cursor: pointer;
+}
+.mini-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+.primary-btn {
+  font: inherit; font-size: 13.5px; color: #fff; background: var(--accent); border: 1px solid var(--accent);
+  border-radius: 999px; padding: 10px 22px; cursor: pointer; white-space: nowrap; flex: 0 0 auto;
+  transition: background .16s ease, opacity .16s ease;
+}
+.primary-btn:hover:not(:disabled) { background: var(--accent-hover); }
+.primary-btn:disabled { opacity: .38; cursor: not-allowed; }
+
+/* ---------------------------------------------------------------- 全屏页面（知情同意 / 结束说明） */
+.page-screen {
+  position: fixed; inset: 0; z-index: 60; background: #fff; overflow-y: auto;
+  opacity: 0; transition: opacity .26s ease;
+}
+.page-screen.visible { opacity: 1; }
+.page-card { max-width: 720px; margin: 0 auto; padding: 56px 24px 60px; animation: rise-in .4s var(--ease-out) both; }
+.page-card h2 { font-size: 21px; margin: 0 0 18px; }
+.page-text { font-size: 16px; font-weight: 500; line-height: 1.95; color: var(--fg-soft); word-break: break-word; }   /* 小四 */
+.page-check {
+  display: flex; align-items: flex-start; gap: 10px; margin: 26px 0 0;
+  font-size: 16px; line-height: 1.7; color: var(--fg-soft); cursor: pointer;   /* 小四 */
+}
+.page-check input { width: 16px; height: 16px; margin-top: 2px; accent-color: #111213; }
+/* 知情同意页的「含编号」形态：勾选同意之后、进入按钮之前，填写编号才能进入 */
+.page-id { margin: 20px 0 0; }
+.page-id label { display: block; font-size: 16px; font-weight: 600; color: var(--fg); margin-bottom: 8px; }   /* 小四 */
+.page-id .answer-input { max-width: 340px; }
+.page-hint { font-size: 12.5px; color: var(--muted); margin: 0 0 14px; }
+/* 勾选与按钮同属一块：按钮紧随勾选项、整行宽度，勾选后方可点击 */
+.page-go {
+  display: block; width: 100%; margin-top: 18px;
+  font: inherit; font-size: 16px; font-weight: 600; color: #fff; background: var(--accent);   /* 小四 */
+  border: 0; border-radius: 999px; padding: 13px; cursor: pointer;
+  transition: background .16s ease, opacity .16s ease;
+}
+.page-go:hover:not(:disabled) { background: var(--accent-hover); }
+.page-go:disabled { background: #cfcfd3; cursor: not-allowed; }
+
+@keyframes blink { 50% { opacity: 0; } }
+@keyframes bounce { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-3px); opacity: 1; } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+/* 新题进入：纯位移过渡（合成层完成，不触发重绘）——原来的「先透明再浮现」会造成一闪 */
+@keyframes card-in { from { transform: translateY(7px); } to { transform: none; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---------------------------------------------------------------- 应用内确认弹窗 */
+.confirm-mask {
+  position: fixed; inset: 0; z-index: 90; background: rgba(17, 18, 19, 0.42);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  opacity: 0; transition: opacity .2s ease;
+}
+.confirm-mask.visible { opacity: 1; }
+.confirm-card {
+  width: min(92vw, 360px); max-height: calc(100dvh - 48px); overflow: auto;   /* 绝不超过可视区 */
+  background: #fff; border-radius: 18px; padding: 22px 20px 18px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
+  transform: translateY(10px) scale(.98); transition: transform .2s var(--ease-out);
+}
+.confirm-mask.visible .confirm-card { transform: none; }
+/* 弹窗顶部圆形徽标（如重做断言的 ⚠）：与「未提交」徽标同一套 warn 配色 */
+.confirm-icon {
+  width: 48px; height: 48px; margin: 0 auto 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; line-height: 1;
+  color: var(--warn-fg); background: var(--warn-bg);
+  border: 1px solid var(--warn-border); border-radius: 50%;
+}
+.confirm-card h3 { margin: 0 0 8px; font-size: 16px; }
+.confirm-text { margin: 0 0 18px; font-size: 13.5px; line-height: 1.8; color: var(--fg-soft); white-space: pre-wrap; }
+.confirm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.confirm-actions .ghost-btn { padding: 9px 16px; }
+.confirm-go { width: auto; margin: 0; padding: 9px 22px; font-size: 13.5px; }
+
+
+/* ---------------------------------------------------------------- 底部常驻输入框
+   文本题在这里输入并发送；其他题型（选择题、题组、全屏页）输入框仍在，但发不出去。 */
+.composer { flex: 0 0 auto; border-top: 1px solid var(--border); background: #fff; }
+.composer-inner {
+  max-width: 860px; margin: 0 auto; padding: 12px 20px 0;
+  display: flex; align-items: flex-end; gap: 10px;
+}
+.composer-input {
+  flex: 1 1 auto; font: inherit; font-size: 16px; line-height: 1.7; color: var(--fg);   /* 小四 */
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 11px 14px; outline: none; resize: none; overflow: hidden; max-height: 168px;
+  transition: border-color .18s ease, background .18s ease;
+}
+.composer-input:focus { border-color: var(--border-strong); background: #fff; }
+.composer-input:disabled { background: #f7f7f8; color: var(--faint); cursor: not-allowed; }
+.composer-send { border-radius: 14px; padding: 11px 20px; }
+/* 「需输入指定内容」的题：断言没过时的提示（只提示、不发送；输入内容原样保留） */
+.composer-error {
+  max-width: 860px; margin: 0 auto; padding: 7px 20px 0;
+  font-size: 12px; line-height: 1.6; color: #b3261e;
+}
+.composer-error::before { content: '⚠ '; }
+.composer-inner.shake { animation: composer-shake .24s var(--ease-out); }
+@keyframes composer-shake {
+  0%, 100% { transform: none; }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+.composer-hint {
+  max-width: 860px; margin: 0 auto; padding: 7px 20px 11px;
+  font-size: 11.5px; line-height: 1.6; color: var(--muted); min-height: 30px;
+}
+/* 备案号：工信部要求网站底部悬挂 ICP 备案号，并链接至工信部备案管理系统 */
+.composer-foot {
+  max-width: 860px; margin: 0 auto; padding: 0 20px 9px;
+  font-size: 11px; line-height: 1.6; color: var(--faint); text-align: center;
+}
+.composer-foot a { color: var(--faint); text-decoration: none; }
+.composer-foot a:hover { color: var(--muted); text-decoration: underline; }
+
+/* ---------------------------------------------------------------- 切屏提醒浮层 */
+
+/* ---------------------------------------------------------------- 手机适配 */
+@media (max-width: 640px) {
+  .topbar-inner { padding: 10px 14px; }
+  .chat-stream { padding: 14px 13px 48px; gap: 12px; }
+  .msg.ai .ai-text { font-size: 16px; }   /* 小四（手机端一致） */
+  .qcard { padding: 13px 14px; border-radius: 14px; }
+  .qtitle { font-size: 14px; }
+  .opt-row { gap: 7px; }
+  .option-btn { font-size: 16px; padding: 10px 11px; border-radius: 10px; }   /* 小四 */
+  .rating-btn { width: 38px; height: 38px; font-size: 12.5px; }
+  .subs.row { flex-direction: column; gap: 18px; }
+  .page-card { padding: 40px 18px 48px; }
+  .answer-input { font-size: 16px; }
+}
