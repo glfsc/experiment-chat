@@ -766,7 +766,7 @@ async function enterAdmin() {
   consumePendingImport();       // 分享链接（?import=CODE）进入时自动打开「新建」弹窗并预填编号
 }
 
-// 切到未登录视图：管理端整页换成一屏「登录卡片 + 问卷入口 + 备案号」
+// 切到未登录视图：管理端整页换成一屏「登录卡片 + 问卷入口」
 function showLogin(message) {
   $('admin-view').classList.add('hidden');
   $('login-view').classList.remove('hidden');

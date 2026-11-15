@@ -403,7 +403,7 @@ input, textarea, [contenteditable="true"] {
   max-width: 860px; margin: 0 auto; padding: 7px 20px 11px;
   font-size: 11.5px; line-height: 1.6; color: var(--muted); min-height: 30px;
 }
-/* 备案号：工信部要求网站底部悬挂 ICP 备案号，并链接至工信部备案管理系统 */
+
 .composer-foot {
   max-width: 860px; margin: 0 auto; padding: 0 20px 9px;
   font-size: 11px; line-height: 1.6; color: var(--faint); text-align: center;

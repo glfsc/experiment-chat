@@ -28,7 +28,7 @@ body { margin: 0; font-family: var(--font); color: var(--fg); background: #fff; 
 .hidden { display: none !important; }
 
 /* ---------------------------------------------------------------- 登录（未登录视图）
-   根路径 / 就是管理端：未登录时显示这一屏（登录卡片 + 问卷入口 + 备案号），登录后切到 #admin-view。 */
+   根路径 / 就是管理端：未登录时显示这一屏（登录卡片 + 问卷入口），登录后切到 #admin-view。 */
 .login-view { min-height: 100vh; display: flex; padding: 40px 20px; background: #fff; }
 /* 用 margin:auto 居中：内容比窗口高时也能正常滚动，不会被裁掉顶部 */
 .login-stack { width: min(92vw, 400px); margin: auto; display: flex; flex-direction: column; gap: 16px; }
@@ -77,7 +77,7 @@ body { margin: 0; font-family: var(--font); color: var(--fg); background: #fff; 
 .link-btn:hover { color: var(--fg); }
 .login-error { font-size: 12.5px; color: var(--danger); margin: 10px 0 0; }
 .login-hint { font-size: 11.5px; color: var(--faint); margin: 14px 0 0; }
-/* 备案号：工信部要求网站底部悬挂 ICP 备案号，并链接至工信部备案管理系统 */
+
 .login-foot { margin: 6px 0 0; font-size: 12px; color: var(--faint); text-align: center; }
 .login-foot a { color: var(--faint); text-decoration: none; }
 .login-foot a:hover { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
@@ -179,9 +179,7 @@ body.col-dragging { cursor: col-resize; user-select: none; }
 .ol-band .line { flex: 1 1 auto; height: 1px; background: var(--border); }
 .sidebar-bottom { margin-top: auto; padding-top: 12px; display: flex; flex-direction: column; gap: 10px; }
 .sidebar-tip { font-size: 11.5px; line-height: 1.75; color: var(--faint); margin: 0; padding: 0 4px; }
-/* 备案号：工信部要求网站底部悬挂 ICP 备案号，并链接至工信部备案管理系统 */
-.sidebar-beian { font-size: 11px; line-height: 1.6; color: var(--faint); text-decoration: none; padding: 0 4px; word-break: break-all; }
-.sidebar-beian:hover { color: var(--muted); text-decoration: underline; }
+
 
 .admin-main { flex: 1 1 auto; min-width: 0; padding: 28px 32px 44px; }
 .admin-main.editing { padding: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
