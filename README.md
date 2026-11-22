@@ -59,7 +59,8 @@ node server.js
 ## 目录结构
 
 ```text
-server.js             HTTP 服务、路由、计时门控与导出
+server.js             服务端入口（HTTP 路由装配 + 启动）
+src/                  服务端模块：config / http / auth / session / preview / report / routes
 db.js                 数据层：建表、种子、题目归一化、存取
 seed-demo.js          中性示例种子（首次启动创建示例模板 / 问卷）
 xlsx.js               零依赖的 XLSX 写出
@@ -67,6 +68,7 @@ public/               管理端与被试端（无构建，原生 HTML/CSS/JS）
   admin.html          管理端外壳
   chat.html           被试端页面
   assets/             前端脚本与样式
+  assets/admin/       管理端 ES Module（main / core / features / pages）
 vendor/qrcode.js      二维码生成
 ```
 

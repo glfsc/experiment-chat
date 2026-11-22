@@ -72,6 +72,11 @@ const state = {
   redoing: null             // 打分题重做中：{ itemId, action, card, control, submitBtn, hint, busy }（最多一张卡片）
 };
 
+// 本机走查脚本（scripts/capture-shots.js）通过 CDP 读内部状态用；业务代码不要依赖它。
+globalThis.__chatState = state;
+Object.defineProperty(globalThis, '__previewSpeed', { get: () => previewSpeed });
+globalThis.__setPreviewSpeed = (v) => { previewSpeed = v; };
+
 // 时间已到后的统一提示：停止作答，只能重做（被试端各处共用同一句，避免口径不一致）
 const STOPPED_HINT = '作答时间已到，本题已停止作答。如需重新作答，请点击顶部的「重做」。';
 

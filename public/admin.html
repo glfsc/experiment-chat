@@ -8,8 +8,7 @@
   <link rel="stylesheet" href="/assets/admin.css">
 </head>
 <body>
-  <!-- 未登录视图：管理端登录（进管理端）+ 问卷链接入口。
-       根路径 / 就是管理端页面，未登录时显示这一屏，登录后由脚本切到 #admin-view -->
+
   <div id="login-view" class="login-view hidden">
     <div class="login-stack">
       <div class="login-card">
@@ -71,7 +70,10 @@
           <label class="survey-label" for="survey-code">填写问卷</label>
           <input id="survey-code" type="text" autocomplete="off" placeholder="粘贴问卷链接或输入短码">
         </form>
-      </div>
+      </div>
+
+
+
     </div>
   </div>
 
@@ -115,7 +117,10 @@
           <span>设置</span>
           <!-- 行最右侧：当前登录账号的头像（未上传时显示用户名首字母），由脚本填充 -->
           <span id="sidebar-user-avatar" class="sidebar-user-avatar" aria-hidden="true"></span>
-        </button>
+        </button>
+
+
+
       </div>
     </aside>
 
@@ -141,6 +146,6 @@
   <div id="toast" class="toast hidden" role="status"></div>
 
   <script src="/assets/richtext.js"></script>
-  <script src="/assets/admin.js"></script>
+  <script type="module" src="/assets/admin/main.js"></script>
 </body>
 </html>

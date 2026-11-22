@@ -404,12 +404,8 @@ input, textarea, [contenteditable="true"] {
   font-size: 11.5px; line-height: 1.6; color: var(--muted); min-height: 30px;
 }
 
-.composer-foot {
-  max-width: 860px; margin: 0 auto; padding: 0 20px 9px;
-  font-size: 11px; line-height: 1.6; color: var(--faint); text-align: center;
-}
-.composer-foot a { color: var(--faint); text-decoration: none; }
-.composer-foot a:hover { color: var(--muted); text-decoration: underline; }
+
+
 
 /* ---------------------------------------------------------------- 切屏提醒浮层 */
 
